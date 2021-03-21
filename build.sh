@@ -11,4 +11,4 @@ flatcc -a ../../chess.fbs
 cd ../..
 
 # Build the server
-gcc server.c -I include/generated -I include -lflatcc -o chess_server
+gcc server.c -I include/generated -I include -lflatcc -lflatccrt -o chess_server
