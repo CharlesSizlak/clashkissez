@@ -59,7 +59,7 @@ table GameLastMoveRequest {
     game_id:uint32;
 }
 
-table GameHeartbeatReply {
+table GameHeartbeatRequest {
     session_token:[uint8];
     game_id:uint32;
 }
@@ -91,6 +91,10 @@ table FriendRequestReply {
 }
 
 table FriendRequestStatusRequest {
+    session_token:[uint8];
+}
+
+table ActiveGameRequest {
     session_token:[uint8];
 }
 
@@ -157,7 +161,12 @@ table GameMoveNotification {
     move:[uint8];
 }
 
-table GameHeartbeatNotification {
+table GameLastMoveReply {
+    move:[uint8];
+    draw_offer:bool;
+}
+
+table GameHeartbeatReply {
     time_remaining_player:uint32;
     time_remaining_opponent:uint32;
 }
@@ -195,4 +204,8 @@ table IndividualFriendRequestStatus {
     elo:uint16;
     connection_status:bool;
     game_status:bool;
+}
+
+table ActiveGameReply {
+    game_id:[uint32];
 }
