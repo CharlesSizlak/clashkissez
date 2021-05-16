@@ -70,6 +70,13 @@ void loop_remove_signal(loop_t *loop, int signum)
     hash_remove(loop->sig_map, signum);
 }
 
+void loop_add_timer(loop_t *loop, struct timespec *timer)
+{
+    // send help, brodal queues scare me
+}
+
+
+
 int loop_run(loop_t *loop) 
 {
     loop->running = true;

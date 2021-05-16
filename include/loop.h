@@ -15,6 +15,7 @@ typedef struct loop_t {
     kh_map_t *sig_map;
     bool running;
     sigset_t sigset;
+    
 } loop_t;
 
 typedef enum event_e {
@@ -47,7 +48,7 @@ int loop_add_signal(loop_t *loop, int signum, signal_callback_f cb);
 
 void loop_remove_signal(loop_t *loop, int signum);
 
-void loop_add_timer(loop_t *loop, struct timespec);
+void loop_add_timer(loop_t *loop, struct timespec *timer);
 
 void loop_remove_timer(loop_t *loop);
 
