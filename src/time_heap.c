@@ -3,12 +3,18 @@
 #include <time.h>
 #include <stdint.h>
 #include "time_heap.h"
+#include "debug.h"
+
+static bool timespec_gt(struct timespec *a, struct timespec *b)
+{
+    return (a->tv_sec > b->tv_sec || (a->tv_sec == b->tv_sec && a->tv_nsec > b->tv_nsec));
+}
 
 static bool timer_gt(time_heap_t *heap, size_t idx_a, size_t idx_b)
 {
     struct timespec *a = &heap->elements[idx_a].timer;
     struct timespec *b = &heap->elements[idx_b].timer;
-    return (a->tv_sec > b->tv_sec || (a->tv_sec == b->tv_sec && a->tv_nsec > b->tv_nsec));
+    return timespec_gt(a, b);
 }
 
 static void timer_swp(time_heap_t *heap, size_t idx_a, size_t idx_b)
@@ -21,6 +27,15 @@ static void timer_swp(time_heap_t *heap, size_t idx_a, size_t idx_b)
     memcpy(b, &temp, sizeof(time_element_t));
 }
 
+static size_t timer_get_child_right(size_t index)
+{
+    return index * 2 + 2;
+}
+static size_t timer_get_child_left(size_t index)
+{
+    return index * 2 + 1;
+}
+
 static void thash_add(kh_tmap_t *hashtable, size_t key, size_t value)
 {
     int ret;
@@ -28,7 +43,18 @@ static void thash_add(kh_tmap_t *hashtable, size_t key, size_t value)
     kh_val(hashtable, i) = value;
 }
 
-size_t thash_get(kh_tmap_t *hashtable, size_t key)
+static void thash_remove(kh_tmap_t *hashtable, size_t key)
+{
+    khint_t i = kh_get_tmap(hashtable, key);
+    if (i == kh_end(hashtable))
+    {
+        return;
+    }
+    kh_del_tmap(hashtable, i);
+    return;
+}
+
+static size_t thash_get(kh_tmap_t *hashtable, size_t key)
 {
     khint_t i = kh_get_tmap(hashtable, key);
     if (i == kh_end(hashtable))
@@ -37,6 +63,40 @@ size_t thash_get(kh_tmap_t *hashtable, size_t key)
     }
     size_t value = kh_val(hashtable, i);
     return value;
+}
+
+static void heap_remove_index(time_heap_t *heap, size_t index)
+{
+    thash_remove(heap->hashtable, heap->elements[index].id);
+    timer_swp(heap, index, --heap->total_elements);
+    // check the children of the inheritor of the index, down heapify until we're valid
+    while (true)
+    {
+        size_t right_child = timer_get_child_right(index);
+        size_t left_child = timer_get_child_left(index);
+        if (right_child < heap->total_elements)
+        {
+            if (timer_gt(heap, index, right_child))
+            {
+                thash_add(heap->hashtable, heap->elements[right_child].id, index);
+                timer_swp(heap, index, right_child);
+                index = right_child;
+                continue;
+            }
+        }
+        if (left_child < heap->total_elements)
+        {
+            if (timer_gt(heap, index, left_child))
+            {
+                thash_add(heap->hashtable, heap->elements[left_child].id, index);
+                timer_swp(heap, index, left_child);
+                index = left_child;
+                continue;
+            }
+        }
+        thash_add(heap->hashtable, heap->elements[index].id, index);
+        break;
+    }
 }
 
 time_heap_t *heap_create(void)
@@ -91,22 +151,87 @@ void heap_remove(time_heap_t *heap, size_t id)
         DEBUG_PRINTF("Failed to heap_remove.");
         return;
     }
-
-    // check the children of the inheritor of the index, down heapify until we're valid
-
+    heap_remove_index(heap, index);
     // :)
 }
 
 bool heap_peek(time_heap_t *heap)
 {
     // Check to see if the timer on top of the heap has expired
-    return;
+    struct timespec current_time;
+    //TODO find a way to make this not fucking red
+    clock_gettime(CLOCK_MONOTONIC, &current_time);
+    return timespec_gt(&current_time, &heap->elements[0].timer);
 }
 
 void heap_update(time_heap_t *heap, size_t id, struct timespec *element)
 {
+    size_t index = thash_get(heap->hashtable, id);
+    memcpy(&heap->elements[index].timer, element, sizeof(struct timespec));
+    if (index > 0)
+    {
+        size_t parent_index = (index - 1) / 2;
+        if (timer_gt(heap, parent_index, index))
+        {
+            while (true)
+            {
+                parent_index = (index - 1) / 2;
+                if (index == 0 || timer_gt(heap, index, parent_index)) 
+                {
+                    thash_add(heap->hashtable, id, index);
+                    return;
+                }
+                else
+                {
+                    thash_add(heap->hashtable, heap->elements[parent_index].id, index);
+                    timer_swp(heap, index, parent_index);
+                    index = parent_index;
+                }
+            }
+        }
+    }
+    size_t right_child = timer_get_child_right(index);
+    size_t left_child = timer_get_child_left(index);
+    if (timer_gt(heap, index, right_child) || timer_gt(heap, index, left_child))
+    {
+        while (true)
+        {
+            right_child = timer_get_child_right(index);
+            left_child = timer_get_child_left(index);
+            if (right_child < heap->total_elements)
+            {
+                if (timer_gt(heap, index, right_child))
+                {
+                    thash_add(heap->hashtable, heap->elements[right_child].id, index);
+                    timer_swp(heap, index, right_child);
+                    index = right_child;
+                    continue;
+                }
+            }
+            if (left_child < heap->total_elements)
+            {
+                if (timer_gt(heap, index, left_child))
+                {
+                    thash_add(heap->hashtable, heap->elements[left_child].id, index);
+                    timer_swp(heap, index, left_child);
+                    index = left_child;
+                    continue;
+                }
+            }
+            thash_add(heap->hashtable, id, index);
+            break;
+        }
+    }
+}
+
+void heap_extract(time_heap_t *heap)
+{
+    heap_remove_index(heap, 0);
 }
 
 void heap_free(time_heap_t *heap)
 {
+    kh_destroy_tmap(heap->hashtable);
+    free(heap->elements);
+    free(heap);
 }

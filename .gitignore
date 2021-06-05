@@ -2,3 +2,4 @@ chess_server
 include/generated
 pychess
 .vscode/
+build/

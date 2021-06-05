@@ -33,4 +33,6 @@ void heap_update(time_heap_t *heap, size_t id, struct timespec *element);
 
 void heap_free(time_heap_t *heap);
 
+void heap_extract(time_heap_t *heap);
+
 #endif

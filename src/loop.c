@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 199309L
 #include <sys/epoll.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,6 +6,7 @@
 #include <errno.h>
 #include "loop.h"
 #include "hash.h"
+
 
 static bool signals_received[_NSIG];
 
