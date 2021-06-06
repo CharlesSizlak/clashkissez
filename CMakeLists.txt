@@ -6,41 +6,43 @@ project(Clashkissez VERSION 0.3)
 # set(CMAKE_C_STANDARD_REQUIRED True)
 
 add_library(loop STATIC
-    "${CMAKE_CURRENT_LIST_DIR}/src/loop.c"
-    "${CMAKE_CURRENT_LIST_DIR}/src/hash.c"
+        "${CMAKE_CURRENT_LIST_DIR}/src/loop.c"
+        "${CMAKE_CURRENT_LIST_DIR}/src/hash.c"
     )
 
 target_include_directories(loop PUBLIC 
-    "${CMAKE_CURRENT_LIST_DIR}/include"
-    "${CMAKE_CURRENT_LIST_DIR}/deps/klib"
+        "${CMAKE_CURRENT_LIST_DIR}/include"
+        "${CMAKE_CURRENT_LIST_DIR}/deps/klib"
     )
 
 add_library(time_heap STATIC 
-    "${CMAKE_CURRENT_LIST_DIR}/src/time_heap.c"
+        "${CMAKE_CURRENT_LIST_DIR}/src/time_heap.c"
     )
 
 target_include_directories(time_heap PUBLIC 
-    "${CMAKE_CURRENT_LIST_DIR}/include"
-    "${CMAKE_CURRENT_LIST_DIR}/deps/klib"
+        "${CMAKE_CURRENT_LIST_DIR}/include"
+        "${CMAKE_CURRENT_LIST_DIR}/deps/klib"
     )
 
+target_link_libraries(loop PUBLIC time_heap)
+
 add_executable(chess_server
-    "${CMAKE_CURRENT_LIST_DIR}/src/server.c"
+        "${CMAKE_CURRENT_LIST_DIR}/src/server.c"
     )
 
 target_include_directories(chess_server PUBLIC 
-    "${CMAKE_CURRENT_LIST_DIR}/include"
-    "${CMAKE_CURRENT_LIST_DIR}/include/generated"
+        "${CMAKE_CURRENT_LIST_DIR}/include"
+        "${CMAKE_CURRENT_LIST_DIR}/include/generated"
     )
 
 target_compile_definitions(chess_server PRIVATE -D_GNU_SOURCE)
 
 target_link_libraries(chess_server PUBLIC
-    flatcc
-    flatccrt
-    rt
-    loop
-    time_heap
+        flatcc
+        flatccrt
+        rt
+        loop
+        time_heap
     )
 
 add_executable(loop_test "${CMAKE_CURRENT_LIST_DIR}/test/loop_test.c")

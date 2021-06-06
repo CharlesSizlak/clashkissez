@@ -18,8 +18,8 @@ popd >/dev/null
 
 # Build the server
 #gcc -std=c17 -D_GNU_SOURCE src/server.c src/loop.c src/hash.c -I deps/klib -I include/generated -I include -lflatcc -lflatccrt -lrt -o chess_server
-mkdir -p build
-cd build
-cmake -DCMAKE_BUILD_TYPE=Release ..
+mkdir -p debug
+cd debug
+cmake -DCMAKE_BUILD_TYPE=Debug ..
 make
 cd ..

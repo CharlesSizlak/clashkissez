@@ -3,3 +3,4 @@ include/generated
 pychess
 .vscode/
 build/
+debug/

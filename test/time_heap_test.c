@@ -28,6 +28,7 @@ static void heap_print(time_heap_t *heap)
 int main()
 {
     time_heap_t *heap = heap_create();
+    //printf("Testing What Happens When Empty: %i\n", heap_peek(heap));
     struct timespec current_time;
     for (size_t i = 0; i < 4; i++)
     {
@@ -39,5 +40,6 @@ int main()
     heap_print(heap);
     heap_extract(heap);
     heap_print(heap);
+    printf("Heap Peek Result: %i\n", heap_peek(heap));
     heap_free(heap);
 }

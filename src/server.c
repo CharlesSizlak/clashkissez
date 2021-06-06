@@ -9,7 +9,7 @@
 #include "chess_verifier.h"
 #include "loop.h"
 
-void accept_connection_cb(loop_t *loop, event_e event, int fd)
+void accept_connection_cb(loop_t *loop, event_e event, int fd, void *data)
 {
     // sit on the socket accepting new connections
     struct sockaddr_in client_addr;
@@ -19,7 +19,6 @@ void accept_connection_cb(loop_t *loop, event_e event, int fd)
         printf("Failed to accept connection bruv.\n");
         return;
     }
-
     printf("Connection accepted!\n");
 }
 
@@ -80,8 +79,9 @@ int main(int argc, char **arg)
     loop_t *loop = &loop_storage;
 
     loop_init(loop);
-
-    loop_add_fd(loop, server_fd, READ_EVENT, accept_connection_cb);
+    
+    //TODO remove null, replace with data
+    loop_add_fd(loop, server_fd, READ_EVENT, accept_connection_cb, NULL);
 
     loop_run(loop);
     loop_fini(loop);

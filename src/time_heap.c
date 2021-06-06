@@ -159,7 +159,6 @@ bool heap_peek(time_heap_t *heap)
 {
     // Check to see if the timer on top of the heap has expired
     struct timespec current_time;
-    //TODO find a way to make this not fucking red
     clock_gettime(CLOCK_MONOTONIC, &current_time);
     return timespec_gt(&current_time, &heap->elements[0].timer);
 }
