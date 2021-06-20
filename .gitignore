@@ -4,3 +4,4 @@ pychess
 .vscode/
 build/
 debug/
+binaries/

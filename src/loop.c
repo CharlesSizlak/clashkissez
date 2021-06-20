@@ -79,10 +79,6 @@ void loop_init(loop_t *loop)
 int loop_add_fd(loop_t *loop, int fd, event_e event,
         fd_callback_f cb, void *data)
 {
-    poll_item_t *poll_item = malloc(sizeof(poll_item_t));
-    poll_item->cb = cb;
-    poll_item->fd = fd;
-    poll_item->data = data;
     struct epoll_event ev;
     switch (event)
     {
@@ -98,9 +94,22 @@ int loop_add_fd(loop_t *loop, int fd, event_e event,
         ev.events = EPOLLIN | EPOLLOUT;
         break;
     }
-    ev.data.ptr = poll_item;
-    epoll_ctl(loop->epoll_fd, EPOLL_CTL_ADD, fd, &ev);
-    hash_add(loop->fd_map, fd, poll_item);
+    if (hash_contains(loop->fd_map, fd)) {
+        poll_item_t *poll_item = hash_get(loop->fd_map, fd);
+        poll_item->cb = cb;
+        poll_item->data = data;
+        ev.data.ptr = poll_item;
+        epoll_ctl(loop->epoll_fd, EPOLL_CTL_MOD, fd, &ev);
+    }
+    else {
+        poll_item_t *poll_item = malloc(sizeof(poll_item_t));
+        poll_item->cb = cb;
+        poll_item->fd = fd;
+        poll_item->data = data;
+        ev.data.ptr = poll_item;
+        epoll_ctl(loop->epoll_fd, EPOLL_CTL_ADD, fd, &ev);
+        hash_add(loop->fd_map, fd, poll_item);
+    }
 }
 
 void loop_remove_fd(loop_t *loop, int fd)
@@ -233,7 +242,22 @@ int loop_run(loop_t *loop)
         if (epoll_return == 1) {
             // Call the callback for the event that arrived
             poll_item_t *poll_item = event.data.ptr;
-            poll_item->cb(loop, event.events, poll_item->fd, poll_item->data);
+            // TODO fiiiiiiinish fixing this error
+            
+            event_e cb_event;
+            if (event.events & EPOLLERR)
+            {
+                cb_event = ERROR_EVENT;
+            }
+            else if (event.events & EPOLLIN)
+            {
+                cb_event = READ_EVENT;
+            }
+            else if (event.events & EPOLLOUT)
+            {
+                cb_event = WRITE_EVENT;
+            }
+            poll_item->cb(loop, cb_event, poll_item->fd, poll_item->data);
         }
     }
 

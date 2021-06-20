@@ -1,5 +1,12 @@
 #!/bin/bash
 
+BUILD_DIR='debug'
+BINARY_DIR='binaries'
+MODE='Debug'
+
+# Cleanup pychess if it already exists
+rm -rf $BUILD_DIR/pychess
+
 # Make a generated include directory
 mkdir -p include/generated
 pushd include/generated >/dev/null
@@ -17,9 +24,20 @@ flatc --python ../chess.fbs
 popd >/dev/null
 
 # Build the server
-#gcc -std=c17 -D_GNU_SOURCE src/server.c src/loop.c src/hash.c -I deps/klib -I include/generated -I include -lflatcc -lflatccrt -lrt -o chess_server
-mkdir -p debug
-cd debug
-cmake -DCMAKE_BUILD_TYPE=Debug ..
+mkdir -p $BUILD_DIR
+cd $BUILD_DIR
+cmake -DCMAKE_BUILD_TYPE=$MODE ..
 make
 cd ..
+
+# Make binary dir
+mkdir -p $BINARY_DIR
+
+# Move pychess into binary dir
+cp -r pychess $BINARY_DIR
+
+# Move C executes into binary dir
+cp $BUILD_DIR/chess_server $BINARY_DIR
+
+# Move python source into binary dir
+cp src/*.py $BINARY_DIR

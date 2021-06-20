@@ -1,7 +1,8 @@
 // Data types
 
 enum Color:byte { white, black, random }
-enum FriendRequestStatus:byte { accepted, declined, pending }
+enum FriendRequestStatus:byte { accepted, pending }
+enum GameResult:byte { white, black, draw, insufficient_material, stalemate, repetition, fifty_move }
 
 // Client -> Server
 
@@ -85,7 +86,7 @@ table FriendRequest {
     username:string;
 }
 
-table FriendRequestReply {
+table FriendRequestResponse {
     session_token:[uint8];
     accept:bool;
 }
@@ -96,6 +97,16 @@ table FriendRequestStatusRequest {
 
 table ActiveGameRequest {
     session_token:[uint8];
+}
+
+table GameHistoryRequest {
+    username:string;
+    session_token:[uint8];
+}
+
+table PastGameFullInformationRequest {
+    session_token:[uint8];
+    game_id:uint32;
 }
 
 // Client <- Server
@@ -188,6 +199,7 @@ table GameOverNotification {
     insufficient_material:bool;
     repetition:bool;
     stalemate:bool;
+    fifty_move:bool;
 }
 
 table FriendRequestNotification {
@@ -208,4 +220,31 @@ table IndividualFriendRequestStatus {
 
 table ActiveGameReply {
     game_id:[uint32];
+}
+
+table ErrorReply {
+    error:uint8;
+}
+
+table GameHistoryReply {
+    amount:uint64;
+}
+
+table IndividualGameHistoryReply {
+    white:string;
+    black:string;
+    date:string;
+    game_result:GameResult;
+    game_id:uint32;
+}
+
+table PastGameFullInformationReply {
+    white:string;
+    black:string;
+    time_increment_white:uint32;
+    time_increment_black:uint32;
+    time_remaining_white:uint32;
+    time_remaining_black:uint32;
+    move_history_size:uint16;
+    move_history:[uint8];
 }

@@ -8,6 +8,246 @@
 #include "chess_reader.h"
 #include "chess_verifier.h"
 #include "loop.h"
+#include "error.h"
+#include "debug.h"
+
+typedef struct connection_ctx_t {
+    uint32_t total_bytes_read;
+    uint32_t read_byte_capacity;
+    uint8_t *read_bytes;
+    uint32_t write_byte_capacity;
+    uint8_t *write_bytes;
+    uint32_t bytes_to_write;
+} connection_ctx_t;
+
+void read_write_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connection_ctx);
+
+    // TODO delete this when we're done using its example
+    // read anything they send us over the wire
+    // check to see if it's a valid loginrequest, if it is we send them a :)
+    // if it's not we terminate the connection, politely
+    /*
+    printf("time for error\n");
+    int status = LoginRequest_verify_as_root(buffer, buffer_size);
+    if (status != 0) {
+        printf("invalid buffer broski\n");
+        printf("%s\n", flatcc_verify_error_string(status));
+        return 1;
+    }
+    LoginRequest_table_t loginRequest = LoginRequest_as_root(buffer);
+    const char *username = LoginRequest_username(loginRequest);
+    const uint8_t *password = LoginRequest_password(loginRequest);
+    size_t password_length = flatbuffers_uint8_vec_len(password);
+    for (size_t i = 0; i < password_length; i++) {
+        printf("%c", password[i]);
+    }
+    printf("\n");
+    printf("%s\n", username);
+    */
+
+/* example of serialization for now
+    flatcc_builder_t builder, *B;
+    B = &builder;
+    flatcc_builder_init(B);
+    LoginRequest_start_as_root(B);
+    LoginRequest_username_create_str(B, "bob");
+    LoginRequest_password_create(B, "passw0rd", 8);
+    LoginRequest_ref_t beep = LoginRequest_end_as_root(B);
+    size_t buffer_size;
+    uint8_t *buffer = flatcc_builder_finalize_aligned_buffer(B, &buffer_size);
+    printf("Here's the stuff as it comes over the wire\n");
+    for (size_t i = 0; i < buffer_size; i++) {
+        printf("%02x ", buffer[i]);
+    }
+    printf("\n");
+    */
+
+void not_implemented_handler(loop_t *loop, int fd, connection_ctx_t *ctx) {
+    // Craft a payload, modify the info in connection context as needed
+    DEBUG_PRINTF("Received valid packet that isn't yet supported");
+    flatcc_builder_t builder, *B;
+    B = &builder;
+    flatcc_builder_init(B);
+    ErrorReply_start_as_root(B);
+    ErrorReply_error_add(B, NOT_IMPLEMENTED_ERROR);
+    ErrorReply_end_as_root(B);
+    size_t buffer_size;
+    uint8_t *buffer = flatcc_builder_finalize_buffer(B, &buffer_size);
+    flatcc_builder_clear(B);
+    if (ctx->bytes_to_write + buffer_size > ctx->write_byte_capacity) {
+        do {
+            ctx->write_byte_capacity *= 2;
+        } while (ctx->bytes_to_write + buffer_size > ctx->write_byte_capacity);
+        ctx->write_bytes = realloc(ctx->write_bytes, ctx->write_byte_capacity);
+    }
+    memcpy(ctx->write_bytes + ctx->bytes_to_write, buffer, buffer_size);
+    ctx->bytes_to_write += buffer_size;
+    free(buffer);
+    // fire payload, update connection ctx and call add_fd again
+    loop_add_fd(loop, fd, READ_WRITE_EVENT, (fd_callback_f)read_write_handler, ctx);
+}
+
+void message_handler(loop_t *loop, int fd, connection_ctx_t *connection_ctx)  {
+    uint8_t *message = connection_ctx->read_bytes + 4;
+    uint32_t message_length = be32toh(*(uint32_t*)connection_ctx->read_bytes);
+    if (LoginRequest_verify_as_root(message, message_length) == 0) {
+        DEBUG_PRINTF("Login request not implemented");
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+    else if (RegisterRequest_verify_as_root(message, message_length) == 0) {
+        DEBUG_PRINTF("Register request not implemented");
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+    else if (UserLookupRequest_verify_as_root(message, message_length) == 0) {
+        DEBUG_PRINTF("UserLookup request not implemented");
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+    else if (GameInviteRequest_verify_as_root(message, message_length) == 0) {
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+    else if (GameAcceptRequest_verify_as_root(message, message_length) == 0) {
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+    else if (FullGameInformationRequest_verify_as_root(message, message_length) == 0) {
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+    else if (GameMoveRequest_verify_as_root(message, message_length) == 0) {
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+    else if (GameLastMoveRequest_verify_as_root(message, message_length) == 0) {
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+    else if (GameHeartbeatRequest_verify_as_root(message, message_length) == 0) {
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+    else if (GameDrawOfferRequest_verify_as_root(message, message_length) == 0) {
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+    else if (GameDrawOfferResponse_verify_as_root(message, message_length) == 0) {
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+    else if (GameResignationRequest_verify_as_root(message, message_length) == 0) {
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+    else if (FriendRequest_verify_as_root(message, message_length) == 0) {
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+    else if (FriendRequestResponse_verify_as_root(message, message_length) == 0) {
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+    else if (FriendRequestStatusRequest_verify_as_root(message, message_length) == 0) {
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+    else if (ActiveGameRequest_verify_as_root(message, message_length) == 0) {
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+    else if (GameHistoryRequest_verify_as_root(message, message_length) == 0) {
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+    else if (PastGameFullInformationRequest_verify_as_root(message, message_length) == 0) {
+        not_implemented_handler(loop, fd, connection_ctx);
+    }
+}  
+
+void read_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connection_ctx)
+{
+    // Check if we've recieved all the bytes for the message
+    // If we have not, read the bytes we do have into memory and store it somehow
+    // Then we do all our other shit when we have all our bytes to eat
+    if (event == ERROR_EVENT) {
+        goto clean_up;
+    }
+    uint32_t message_length;
+    uint32_t bytes_to_read;
+    if (connection_ctx->total_bytes_read < 4) {
+        bytes_to_read = 4 - connection_ctx->total_bytes_read;
+    }
+    else {
+        message_length = be32toh(*(uint32_t*)connection_ctx->read_bytes);
+        bytes_to_read = message_length - (connection_ctx->total_bytes_read - 4);
+    }
+    ssize_t bytes_read = read(
+        fd,
+        connection_ctx->read_bytes + connection_ctx->total_bytes_read, 
+        bytes_to_read
+    );
+    if (bytes_read == -1) {
+        goto clean_up;
+    }
+    connection_ctx->total_bytes_read += bytes_read;
+    if (connection_ctx->total_bytes_read < sizeof(uint32_t))
+    {
+        // Still waiting on the first 4 bytes to give us the message size
+        return;
+    }
+    message_length = be32toh(*(uint32_t*)connection_ctx->read_bytes);
+    if (connection_ctx->total_bytes_read < message_length) {
+        return;
+    }
+    message_handler(loop, fd, connection_ctx);
+    return;
+  clean_up:
+    DEBUG_PRINTF("Read error encountered on fd %i", fd);
+    loop_remove_fd(loop, fd);
+    free(connection_ctx->read_bytes);
+    free(connection_ctx->write_bytes);
+    free(connection_ctx);
+    shutdown(fd, SHUT_RDWR);
+    close(fd);
+}
+
+void write_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connection_ctx) {
+    if (event == ERROR_EVENT) {
+        goto clean_up;
+    }
+    ssize_t bytes_written = write(fd, connection_ctx->write_bytes, connection_ctx->bytes_to_write);
+    if (bytes_written == -1) {
+        goto clean_up;
+    }
+    connection_ctx->bytes_to_write -= bytes_written;
+    if (connection_ctx->bytes_to_write != 0) {
+        // [ ====------3612367123asdf  ]
+        memmove(
+            connection_ctx->write_bytes, 
+            connection_ctx->write_bytes + bytes_written,
+            connection_ctx->bytes_to_write
+        );
+    }
+    else
+    {
+        loop_add_fd(loop, fd, READ_EVENT, (fd_callback_f)read_handler, connection_ctx);
+    }
+    return;
+  clean_up:
+    DEBUG_PRINTF("Write error encountered on fd %i", fd);
+    loop_remove_fd(loop, fd);
+    free(connection_ctx->read_bytes);
+    free(connection_ctx->write_bytes);
+    free(connection_ctx);
+    shutdown(fd, SHUT_RDWR);
+    close(fd);
+}
+
+void read_write_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connection_ctx) {
+    if (event == ERROR_EVENT) {
+        goto clean_up;
+    }
+    else if (event == READ_EVENT) {
+        read_handler(loop, event, fd, connection_ctx);
+    }
+    else if (event == WRITE_EVENT) {
+        write_handler(loop, event, fd, connection_ctx);
+    }
+
+  clean_up:
+    DEBUG_PRINTF("Error encountered on fd %i", fd);
+    loop_remove_fd(loop, fd);
+    free(connection_ctx->read_bytes);
+    free(connection_ctx->write_bytes);
+    free(connection_ctx);
+    shutdown(fd, SHUT_RDWR);
+    close(fd);
+}
 
 void accept_connection_cb(loop_t *loop, event_e event, int fd, void *data)
 {
@@ -20,6 +260,22 @@ void accept_connection_cb(loop_t *loop, event_e event, int fd, void *data)
         return;
     }
     printf("Connection accepted!\n");
+    connection_ctx_t *connection_ctx = malloc(sizeof(connection_ctx_t));
+    connection_ctx->total_bytes_read = 0;
+    connection_ctx->read_bytes = malloc(4096);
+    connection_ctx->read_byte_capacity = 4096;
+    connection_ctx->write_bytes = malloc(4096);
+    connection_ctx->write_byte_capacity = 4096;
+    connection_ctx->bytes_to_write = 0;
+    loop_add_fd(loop, conn_fd, READ_EVENT, (fd_callback_f)read_handler, connection_ctx);
+    // In the instance we accept a connection, check their message against
+    // a table of legal incoming messages
+
+    // In the instance it's illegal, close the socket
+
+    // In the instance we're legal and good to go, spin up a new fd
+    // to handle this connection (which we already have) and put that
+    // mfer in the event loop so he can handle the ongoing convo
 }
 
 

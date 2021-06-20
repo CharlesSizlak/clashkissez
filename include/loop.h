@@ -24,6 +24,7 @@ typedef enum event_e {
     READ_EVENT,
     WRITE_EVENT,
     READ_WRITE_EVENT,
+    ERROR_EVENT
 } event_e;
 
 typedef struct cb_data_t {
