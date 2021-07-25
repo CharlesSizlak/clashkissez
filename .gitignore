@@ -1,5 +1,5 @@
 chess_server
-include/generated
+generated/
 pychess
 .vscode/
 build/

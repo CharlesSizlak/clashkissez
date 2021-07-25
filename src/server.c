@@ -4,11 +4,8 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <unistd.h>
-#include "chess_builder.h"
-#include "chess_reader.h"
-#include "chess_verifier.h"
+#include "chess.h"
 #include "loop.h"
-#include "error.h"
 #include "debug.h"
 
 typedef struct connection_ctx_t {
@@ -65,15 +62,11 @@ void read_write_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *c
 void not_implemented_handler(loop_t *loop, int fd, connection_ctx_t *ctx) {
     // Craft a payload, modify the info in connection context as needed
     DEBUG_PRINTF("Received valid packet that isn't yet supported");
-    flatcc_builder_t builder, *B;
-    B = &builder;
-    flatcc_builder_init(B);
-    ErrorReply_start_as_root(B);
-    ErrorReply_error_add(B, NOT_IMPLEMENTED_ERROR);
-    ErrorReply_end_as_root(B);
+    ErrorReply_t *e = ErrorReply_new();
+    ErrorReply_set_error(e, NOT_IMPLEMENTED_ERROR);
     size_t buffer_size;
-    uint8_t *buffer = flatcc_builder_finalize_buffer(B, &buffer_size);
-    flatcc_builder_clear(B);
+    uint8_t *buffer;
+    ErrorReply_serialize(e, &buffer, &buffer_size);
     if (ctx->bytes_to_write + buffer_size > ctx->write_byte_capacity) {
         do {
             ctx->write_byte_capacity *= 2;
@@ -90,62 +83,86 @@ void not_implemented_handler(loop_t *loop, int fd, connection_ctx_t *ctx) {
 void message_handler(loop_t *loop, int fd, connection_ctx_t *connection_ctx)  {
     uint8_t *message = connection_ctx->read_bytes + 4;
     uint32_t message_length = be32toh(*(uint32_t*)connection_ctx->read_bytes);
-    if (LoginRequest_verify_as_root(message, message_length) == 0) {
-        DEBUG_PRINTF("Login request not implemented");
-        not_implemented_handler(loop, fd, connection_ctx);
-    }
-    else if (RegisterRequest_verify_as_root(message, message_length) == 0) {
-        DEBUG_PRINTF("Register request not implemented");
-        not_implemented_handler(loop, fd, connection_ctx);
-    }
-    else if (UserLookupRequest_verify_as_root(message, message_length) == 0) {
-        DEBUG_PRINTF("UserLookup request not implemented");
-        not_implemented_handler(loop, fd, connection_ctx);
-    }
-    else if (GameInviteRequest_verify_as_root(message, message_length) == 0) {
-        not_implemented_handler(loop, fd, connection_ctx);
-    }
-    else if (GameAcceptRequest_verify_as_root(message, message_length) == 0) {
-        not_implemented_handler(loop, fd, connection_ctx);
-    }
-    else if (FullGameInformationRequest_verify_as_root(message, message_length) == 0) {
-        not_implemented_handler(loop, fd, connection_ctx);
-    }
-    else if (GameMoveRequest_verify_as_root(message, message_length) == 0) {
-        not_implemented_handler(loop, fd, connection_ctx);
-    }
-    else if (GameLastMoveRequest_verify_as_root(message, message_length) == 0) {
-        not_implemented_handler(loop, fd, connection_ctx);
-    }
-    else if (GameHeartbeatRequest_verify_as_root(message, message_length) == 0) {
-        not_implemented_handler(loop, fd, connection_ctx);
-    }
-    else if (GameDrawOfferRequest_verify_as_root(message, message_length) == 0) {
-        not_implemented_handler(loop, fd, connection_ctx);
-    }
-    else if (GameDrawOfferResponse_verify_as_root(message, message_length) == 0) {
-        not_implemented_handler(loop, fd, connection_ctx);
-    }
-    else if (GameResignationRequest_verify_as_root(message, message_length) == 0) {
-        not_implemented_handler(loop, fd, connection_ctx);
-    }
-    else if (FriendRequest_verify_as_root(message, message_length) == 0) {
-        not_implemented_handler(loop, fd, connection_ctx);
-    }
-    else if (FriendRequestResponse_verify_as_root(message, message_length) == 0) {
-        not_implemented_handler(loop, fd, connection_ctx);
-    }
-    else if (FriendRequestStatusRequest_verify_as_root(message, message_length) == 0) {
-        not_implemented_handler(loop, fd, connection_ctx);
-    }
-    else if (ActiveGameRequest_verify_as_root(message, message_length) == 0) {
-        not_implemented_handler(loop, fd, connection_ctx);
-    }
-    else if (GameHistoryRequest_verify_as_root(message, message_length) == 0) {
-        not_implemented_handler(loop, fd, connection_ctx);
-    }
-    else if (PastGameFullInformationRequest_verify_as_root(message, message_length) == 0) {
-        not_implemented_handler(loop, fd, connection_ctx);
+    TableType_e table_type = determine_table_type(message, message_length);
+    switch (table_type) {
+        case TABLE_TYPE_LoginRequest: {
+            DEBUG_PRINTF("Login request not implemented");
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        case TABLE_TYPE_RegisterRequest: {
+            DEBUG_PRINTF("Register request not implemented");
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        case TABLE_TYPE_UserLookupRequest: {
+            DEBUG_PRINTF("UserLookup request not implemented");
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        case TABLE_TYPE_GameInviteRequest: {
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        case TABLE_TYPE_GameAcceptRequest: {
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        case TABLE_TYPE_FullGameInformationRequest: {
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        case TABLE_TYPE_GameMoveRequest: {
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        case TABLE_TYPE_GameLastMoveRequest: {
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        case TABLE_TYPE_GameHeartbeatRequest: {
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        case TABLE_TYPE_GameDrawOfferRequest: {
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        case TABLE_TYPE_GameDrawOfferResponse: {
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        case TABLE_TYPE_GameResignationRequest: {
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        case TABLE_TYPE_FriendRequest: {
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        case TABLE_TYPE_FriendRequestResponse: {
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        case TABLE_TYPE_FriendRequestStatusRequest: {
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        case TABLE_TYPE_ActiveGameRequest: {
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        case TABLE_TYPE_GameHistoryRequest: {
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        case TABLE_TYPE_PastGameFullInformationRequest: {
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
+        break;
+        default: {
+            not_implemented_handler(loop, fd, connection_ctx);
+        }
     }
 }  
 

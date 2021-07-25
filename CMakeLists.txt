@@ -24,6 +24,14 @@ target_include_directories(time_heap PUBLIC
         "${CMAKE_CURRENT_LIST_DIR}/deps/klib"
     )
 
+add_library(serialib_chess STATIC
+        "${CMAKE_CURRENT_LIST_DIR}/generated/chess.c"
+    )
+
+target_include_directories(serialib_chess PUBLIC 
+        "${CMAKE_CURRENT_LIST_DIR}/generated"
+    )
+
 target_link_libraries(loop PUBLIC time_heap)
 
 add_executable(chess_server
@@ -32,14 +40,12 @@ add_executable(chess_server
 
 target_include_directories(chess_server PUBLIC 
         "${CMAKE_CURRENT_LIST_DIR}/include"
-        "${CMAKE_CURRENT_LIST_DIR}/include/generated"
     )
 
 target_compile_definitions(chess_server PRIVATE -D_GNU_SOURCE)
 
 target_link_libraries(chess_server PUBLIC
-        flatcc
-        flatccrt
+        serialib_chess
         rt
         loop
         time_heap
