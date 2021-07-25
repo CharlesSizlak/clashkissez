@@ -242,7 +242,6 @@ int loop_run(loop_t *loop)
         if (epoll_return == 1) {
             // Call the callback for the event that arrived
             poll_item_t *poll_item = event.data.ptr;
-            // TODO fiiiiiiinish fixing this error
             
             event_e cb_event;
             if (event.events & EPOLLERR)
