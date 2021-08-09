@@ -4,6 +4,9 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <stdbool.h>
+#include <assert.h>
+#include "hash.h"
 #include "chess.h"
 #include "loop.h"
 #include "debug.h"
@@ -15,49 +18,34 @@ typedef struct connection_ctx_t {
     uint32_t write_byte_capacity;
     uint8_t *write_bytes;
     uint32_t bytes_to_write;
+    int fd;
+    bool close_connection;
 } connection_ctx_t;
+
+typedef struct server_ctx_t {
+    kh_map_t *connection_contexts;
+} server_ctx_t;
+
+static server_ctx_t server_ctx;
 
 void read_write_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connection_ctx);
 
-    // TODO delete this when we're done using its example
-    // read anything they send us over the wire
-    // check to see if it's a valid loginrequest, if it is we send them a :)
-    // if it's not we terminate the connection, politely
-    /*
-    printf("time for error\n");
-    int status = LoginRequest_verify_as_root(buffer, buffer_size);
-    if (status != 0) {
-        printf("invalid buffer broski\n");
-        printf("%s\n", flatcc_verify_error_string(status));
-        return 1;
-    }
-    LoginRequest_table_t loginRequest = LoginRequest_as_root(buffer);
-    const char *username = LoginRequest_username(loginRequest);
-    const uint8_t *password = LoginRequest_password(loginRequest);
-    size_t password_length = flatbuffers_uint8_vec_len(password);
-    for (size_t i = 0; i < password_length; i++) {
-        printf("%c", password[i]);
-    }
-    printf("\n");
-    printf("%s\n", username);
-    */
+void sigint_handler(loop_t *loop, int signal, void *data) {
+    assert(data == NULL);
+    loop->running = false;
+}
 
-/* example of serialization for now
-    flatcc_builder_t builder, *B;
-    B = &builder;
-    flatcc_builder_init(B);
-    LoginRequest_start_as_root(B);
-    LoginRequest_username_create_str(B, "bob");
-    LoginRequest_password_create(B, "passw0rd", 8);
-    LoginRequest_ref_t beep = LoginRequest_end_as_root(B);
-    size_t buffer_size;
-    uint8_t *buffer = flatcc_builder_finalize_aligned_buffer(B, &buffer_size);
-    printf("Here's the stuff as it comes over the wire\n");
-    for (size_t i = 0; i < buffer_size; i++) {
-        printf("%02x ", buffer[i]);
+void queue_write(loop_t *loop, connection_ctx_t *ctx, uint8_t *buffer, size_t buffer_size) {
+    if (ctx->bytes_to_write + buffer_size > ctx->write_byte_capacity) {
+        do {
+            ctx->write_byte_capacity *= 2;
+        } while (ctx->bytes_to_write + buffer_size > ctx->write_byte_capacity);
+        ctx->write_bytes = realloc(ctx->write_bytes, ctx->write_byte_capacity);
     }
-    printf("\n");
-    */
+    memcpy(ctx->write_bytes + ctx->bytes_to_write, buffer, buffer_size);
+    ctx->bytes_to_write += buffer_size;
+    loop_add_fd(loop, ctx->fd, READ_WRITE_EVENT, (fd_callback_f)read_write_handler, ctx);
+}
 
 void not_implemented_handler(loop_t *loop, int fd, connection_ctx_t *ctx) {
     // Craft a payload, modify the info in connection context as needed
@@ -67,22 +55,32 @@ void not_implemented_handler(loop_t *loop, int fd, connection_ctx_t *ctx) {
     size_t buffer_size;
     uint8_t *buffer;
     ErrorReply_serialize(e, &buffer, &buffer_size);
-    if (ctx->bytes_to_write + buffer_size > ctx->write_byte_capacity) {
-        do {
-            ctx->write_byte_capacity *= 2;
-        } while (ctx->bytes_to_write + buffer_size > ctx->write_byte_capacity);
-        ctx->write_bytes = realloc(ctx->write_bytes, ctx->write_byte_capacity);
-    }
-    memcpy(ctx->write_bytes + ctx->bytes_to_write, buffer, buffer_size);
-    ctx->bytes_to_write += buffer_size;
+    ErrorReply_free(e);
+    queue_write(loop, ctx, buffer, buffer_size);
     free(buffer);
-    // fire payload, update connection ctx and call add_fd again
-    loop_add_fd(loop, fd, READ_WRITE_EVENT, (fd_callback_f)read_write_handler, ctx);
+}
+
+void invalid_packet_handler(loop_t *loop, int fd, connection_ctx_t *ctx) {
+    DEBUG_PRINTF("Received a packet that isn't supported");
+    ErrorReply_t *e = ErrorReply_new();
+    ErrorReply_set_error(e, INVALID_PACKET_ERROR);
+    size_t buffer_size;
+    uint8_t *buffer;
+    ErrorReply_serialize(e, &buffer, &buffer_size);
+    ErrorReply_free(e);
+    queue_write(loop, ctx, buffer, buffer_size);
+    free(buffer);
+    ctx->close_connection = true;
 }
 
 void message_handler(loop_t *loop, int fd, connection_ctx_t *connection_ctx)  {
     uint8_t *message = connection_ctx->read_bytes + 4;
     uint32_t message_length = be32toh(*(uint32_t*)connection_ctx->read_bytes);
+    if (message_length == 0) {
+        DEBUG_PRINTF("Received empty message");
+        invalid_packet_handler(loop, fd, connection_ctx);
+        return;
+    }
     TableType_e table_type = determine_table_type(message, message_length);
     switch (table_type) {
         case TABLE_TYPE_LoginRequest: {
@@ -101,67 +99,82 @@ void message_handler(loop_t *loop, int fd, connection_ctx_t *connection_ctx)  {
         }
         break;
         case TABLE_TYPE_GameInviteRequest: {
+            DEBUG_PRINTF("GameInvite request not implemented");
             not_implemented_handler(loop, fd, connection_ctx);
         }
         break;
         case TABLE_TYPE_GameAcceptRequest: {
+            DEBUG_PRINTF("GameAccept request not implemented");
             not_implemented_handler(loop, fd, connection_ctx);
         }
         break;
         case TABLE_TYPE_FullGameInformationRequest: {
+            DEBUG_PRINTF("FullGameInformation request not implemented");
             not_implemented_handler(loop, fd, connection_ctx);
         }
         break;
         case TABLE_TYPE_GameMoveRequest: {
+            DEBUG_PRINTF("GameMove request not implemented");
             not_implemented_handler(loop, fd, connection_ctx);
         }
         break;
         case TABLE_TYPE_GameLastMoveRequest: {
+            DEBUG_PRINTF("GameLastMove request not implemented");
             not_implemented_handler(loop, fd, connection_ctx);
         }
         break;
         case TABLE_TYPE_GameHeartbeatRequest: {
+            DEBUG_PRINTF("GameHeartbeatRequest request not implemented");
             not_implemented_handler(loop, fd, connection_ctx);
         }
         break;
         case TABLE_TYPE_GameDrawOfferRequest: {
+            DEBUG_PRINTF("GameDrawOffer request not implemented");
             not_implemented_handler(loop, fd, connection_ctx);
         }
         break;
         case TABLE_TYPE_GameDrawOfferResponse: {
+            DEBUG_PRINTF("GameDrawOffer response not implemented");
             not_implemented_handler(loop, fd, connection_ctx);
         }
         break;
         case TABLE_TYPE_GameResignationRequest: {
+            DEBUG_PRINTF("GameResignationRequest request not implemented");
             not_implemented_handler(loop, fd, connection_ctx);
         }
         break;
         case TABLE_TYPE_FriendRequest: {
+            DEBUG_PRINTF("Friend request not implemented");
             not_implemented_handler(loop, fd, connection_ctx);
         }
         break;
         case TABLE_TYPE_FriendRequestResponse: {
+            DEBUG_PRINTF("FriendRequest response not implemented");
             not_implemented_handler(loop, fd, connection_ctx);
         }
         break;
         case TABLE_TYPE_FriendRequestStatusRequest: {
+            DEBUG_PRINTF("FriendRequestStatus request not implemented");
             not_implemented_handler(loop, fd, connection_ctx);
         }
         break;
         case TABLE_TYPE_ActiveGameRequest: {
+            DEBUG_PRINTF("ActiveGame request not implemented");
             not_implemented_handler(loop, fd, connection_ctx);
         }
         break;
         case TABLE_TYPE_GameHistoryRequest: {
+            DEBUG_PRINTF("GameHistory request not implemented");
             not_implemented_handler(loop, fd, connection_ctx);
         }
         break;
         case TABLE_TYPE_PastGameFullInformationRequest: {
+            DEBUG_PRINTF("PastGameFullInformation request not implemented");
             not_implemented_handler(loop, fd, connection_ctx);
         }
         break;
         default: {
-            not_implemented_handler(loop, fd, connection_ctx);
+            invalid_packet_handler(loop, fd, connection_ctx);
         }
     }
 }  
@@ -172,6 +185,14 @@ void read_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connect
     // If we have not, read the bytes we do have into memory and store it somehow
     // Then we do all our other shit when we have all our bytes to eat
     if (event == ERROR_EVENT) {
+        #ifndef NDEBUG
+        int       error = 0;
+        socklen_t errlen = sizeof(error);
+        if (getsockopt(fd, SOL_SOCKET, SO_ERROR, (void *)&error, &errlen) == 0)
+        {
+            DEBUG_PRINTF("error = %s\n", strerror(error));
+        }
+        #endif
         goto clean_up;
     }
     uint32_t message_length;
@@ -188,7 +209,7 @@ void read_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connect
         connection_ctx->read_bytes + connection_ctx->total_bytes_read, 
         bytes_to_read
     );
-    if (bytes_read == -1) {
+    if (bytes_read <= 0) {
         goto clean_up;
     }
     connection_ctx->total_bytes_read += bytes_read;
@@ -198,14 +219,22 @@ void read_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connect
         return;
     }
     message_length = be32toh(*(uint32_t*)connection_ctx->read_bytes);
-    if (connection_ctx->total_bytes_read < message_length) {
+    if (connection_ctx->total_bytes_read < message_length + 4) {
         return;
     }
+    DEBUG_PRINTF("About to call message handler, bytes received: %u\n", connection_ctx->total_bytes_read);
+    DEBUG_PRINTF("Read buffer: %02x%02x%02x%02x%02x\n",
+        connection_ctx->read_bytes[0],
+        connection_ctx->read_bytes[1],
+        connection_ctx->read_bytes[2],
+        connection_ctx->read_bytes[3],
+        connection_ctx->read_bytes[4]);
     message_handler(loop, fd, connection_ctx);
     return;
   clean_up:
     DEBUG_PRINTF("Read error encountered on fd %i", fd);
     loop_remove_fd(loop, fd);
+    hash_remove(server_ctx.connection_contexts, fd);
     free(connection_ctx->read_bytes);
     free(connection_ctx->write_bytes);
     free(connection_ctx);
@@ -215,6 +244,14 @@ void read_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connect
 
 void write_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connection_ctx) {
     if (event == ERROR_EVENT) {
+        #ifndef NDEBUG
+        int       error = 0;
+        socklen_t errlen = sizeof(error);
+        if (getsockopt(fd, SOL_SOCKET, SO_ERROR, (void *)&error, &errlen) == 0)
+        {
+            DEBUG_PRINTF("error = %s\n", strerror(error));
+        }
+        #endif
         goto clean_up;
     }
     ssize_t bytes_written = write(fd, connection_ctx->write_bytes, connection_ctx->bytes_to_write);
@@ -223,12 +260,14 @@ void write_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connec
     }
     connection_ctx->bytes_to_write -= bytes_written;
     if (connection_ctx->bytes_to_write != 0) {
-        // [ ====------3612367123asdf  ]
         memmove(
             connection_ctx->write_bytes, 
             connection_ctx->write_bytes + bytes_written,
             connection_ctx->bytes_to_write
         );
+    }
+    else if (connection_ctx->close_connection) {
+        goto close_connection;
     }
     else
     {
@@ -237,7 +276,9 @@ void write_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connec
     return;
   clean_up:
     DEBUG_PRINTF("Write error encountered on fd %i", fd);
+  close_connection:
     loop_remove_fd(loop, fd);
+    hash_remove(server_ctx.connection_contexts, fd);
     free(connection_ctx->read_bytes);
     free(connection_ctx->write_bytes);
     free(connection_ctx);
@@ -247,6 +288,14 @@ void write_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connec
 
 void read_write_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connection_ctx) {
     if (event == ERROR_EVENT) {
+        #ifndef NDEBUG
+        int       error = 0;
+        socklen_t errlen = sizeof(error);
+        if (getsockopt(fd, SOL_SOCKET, SO_ERROR, (void *)&error, &errlen) == 0)
+        {
+            DEBUG_PRINTF("error = %s\n", strerror(error));
+        }
+        #endif
         goto clean_up;
     }
     else if (event == READ_EVENT) {
@@ -255,10 +304,11 @@ void read_write_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *c
     else if (event == WRITE_EVENT) {
         write_handler(loop, event, fd, connection_ctx);
     }
-
+    return;
   clean_up:
     DEBUG_PRINTF("Error encountered on fd %i", fd);
     loop_remove_fd(loop, fd);
+    hash_remove(server_ctx.connection_contexts, fd);
     free(connection_ctx->read_bytes);
     free(connection_ctx->write_bytes);
     free(connection_ctx);
@@ -284,6 +334,9 @@ void accept_connection_cb(loop_t *loop, event_e event, int fd, void *data)
     connection_ctx->write_bytes = malloc(4096);
     connection_ctx->write_byte_capacity = 4096;
     connection_ctx->bytes_to_write = 0;
+    connection_ctx->fd = fd;
+    connection_ctx->close_connection = false;
+    hash_add(server_ctx.connection_contexts, fd, connection_ctx);
     loop_add_fd(loop, conn_fd, READ_EVENT, (fd_callback_f)read_handler, connection_ctx);
     // In the instance we accept a connection, check their message against
     // a table of legal incoming messages
@@ -301,23 +354,6 @@ int main(int argc, char **arg)
     // TODO let the user set PORT from a command line later, defaulting to 15873
     uint16_t PORT = 15873;
 
-
-    /* example of serialization for later
-    flatcc_builder_t builder, *B;
-    B = &builder;
-    flatcc_builder_init(B);
-    LoginRequest_start_as_root(B);
-    LoginRequest_username_create_str(B, "bob");
-    LoginRequest_password_create(B, "passw0rd", 8);
-    LoginRequest_ref_t beep = LoginRequest_end_as_root(B);
-    size_t buffer_size;
-    uint8_t *buffer = flatcc_builder_finalize_aligned_buffer(B, &buffer_size);
-    printf("Here's the stuff as it comes over the wire\n");
-    for (size_t i = 0; i < buffer_size; i++) {
-        printf("%02x ", buffer[i]);
-    }
-    printf("\n");
-    */
 
     // prepare ourselves for recieving stuff by opening a socket
 
@@ -350,14 +386,26 @@ int main(int argc, char **arg)
 
     loop_t loop_storage;
     loop_t *loop = &loop_storage;
+    server_ctx.connection_contexts = kh_init_map();
 
     loop_init(loop);
     
-    //TODO remove null, replace with data
     loop_add_fd(loop, server_fd, READ_EVENT, accept_connection_cb, NULL);
+    loop_add_signal(loop, SIGINT, sigint_handler, NULL);
 
     loop_run(loop);
     loop_fini(loop);
+
+    int fd;
+    connection_ctx_t *connection_ctx;
+    kh_foreach(server_ctx.connection_contexts, fd, connection_ctx, {
+        free(connection_ctx->read_bytes);
+        free(connection_ctx->write_bytes);
+        free(connection_ctx);
+        shutdown(fd, SHUT_RDWR);
+        close(fd);
+    })
+    kh_destroy_map(server_ctx.connection_contexts);
 
     shutdown(server_fd, SHUT_RDWR);
     close(server_fd);
@@ -411,30 +459,7 @@ int main(int argc, char **arg)
     A) how long a connection fd lives before closing
     C) the timer associated with each players clock in a match
 
-    */
-
-
-    // read anything they send us over the wire
-    // check to see if it's a valid loginrequest, if it is we send them a :)
-    // if it's not we terminate the connection, politely
-    /*
-    printf("time for error\n");
-    int status = LoginRequest_verify_as_root(buffer, buffer_size);
-    if (status != 0) {
-        printf("invalid buffer broski\n");
-        printf("%s\n", flatcc_verify_error_string(status));
-        return 1;
-    }
-    LoginRequest_table_t loginRequest = LoginRequest_as_root(buffer);
-    const char *username = LoginRequest_username(loginRequest);
-    const uint8_t *password = LoginRequest_password(loginRequest);
-    size_t password_length = flatbuffers_uint8_vec_len(password);
-    for (size_t i = 0; i < password_length; i++) {
-        printf("%c", password[i]);
-    }
-    printf("\n");
-    printf("%s\n", username);
-    */
     
     return 0;
+    */
 }

@@ -14,6 +14,7 @@ enum GameResult:byte {
     FLAG 
 }
 enum Error:byte { 
+    INVALID_PACKET_ERROR,
     NOT_IMPLEMENTED_ERROR, 
     LOGIN_FAILED_ERROR, 
     REGISTER_FAILED_ERROR,

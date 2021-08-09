@@ -5,15 +5,16 @@ BINARY_DIR='binaries'
 MODE='Debug'
 
 # Cleanup generated if it already exists
-rm -rf generated
-mkdir -p generated
+if [[ ! generated/chess.c -nt chess.schema ]]; then
+    rm -rf generated
+    mkdir -p generated
 
-# Compile the serialib schema
-python3 deps/serialib/generate.py chess.schema \
-    --c-source generated/chess.c \
-    --c-header generated/chess.h \
-    --python generated/chess.py
-
+    # Compile the serialib schema
+    python3 deps/serialib/generate.py chess.schema \
+        --c-source generated/chess.c \
+        --c-header generated/chess.h \
+        --python generated/chess.py
+fi
 # Build the server
 mkdir -p $BUILD_DIR
 cd $BUILD_DIR

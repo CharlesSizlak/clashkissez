@@ -172,6 +172,7 @@ int loop_run(loop_t *loop)
     };
     sigemptyset(&act.sa_mask);
     int sleep = -1;
+    bzero(oldacts, sizeof(struct sigaction) * _NSIG);
 
     // Setup signal handlers for every added signal
     for (int i = 0; i != kh_end(loop->sig_map); i++)
@@ -185,6 +186,7 @@ int loop_run(loop_t *loop)
             DEBUG_PRINTF("sigaction failed: %s", strerror(errno));
             return -1;
         }
+        DEBUG_PRINTF("Initializing oldacts[%d]\n", i);
     }
 
     // Call epoll_wait until loop->running becomes false
@@ -263,10 +265,11 @@ int loop_run(loop_t *loop)
     // Restore original signal handlers
     for (int i = 0; i != kh_end(loop->sig_map); i++)
     {
-		if (kh_exist(loop->sig_map, i)) {
+		if (!kh_exist(loop->sig_map, i)) {
             continue;
         }
         int signum = kh_key(loop->sig_map, i);
+        DEBUG_PRINTF("Restoring oldacts[%d]\n", signum);
         if (sigaction(signum, &oldacts[signum], NULL) == -1)
         {
             return -1;
@@ -278,8 +281,15 @@ void loop_fini(loop_t *loop)
 {
     DEBUG_PRINTF("Cleaning up our loop!");
     int key;
-    poll_item_t *value;
+    size_t id;
+    void *value;
     kh_foreach(loop->fd_map, key, value, {
+        free(value);
+    })
+    kh_foreach(loop->sig_map, key, value, {
+        free(value);
+    })
+    kh_foreach(loop->timer_map, id, value, {
         free(value);
     })
     kh_destroy_map(loop->fd_map);
