@@ -4,13 +4,12 @@
 #include <hash.h>
 #include <signal.h>
 #include <time.h>
+#include "queue.h"
 #include "time_heap.h"
 
+typedef void *(*thread_f)(void *);
+
 typedef struct loop_t {
-    /*
-    an amount of these, it will be static. 
-    fd_callback_f;
-    */
     int epoll_fd;
     kh_map_t *fd_map;
     kh_map_t *sig_map;
@@ -18,13 +17,16 @@ typedef struct loop_t {
     bool running;
     sigset_t sigset;
     time_heap_t *heap;
+    queue_t *pending_fd_callbacks;
+    pthread_t thread_id;
 } loop_t;
 
 typedef enum event_e {
     READ_EVENT,
     WRITE_EVENT,
     READ_WRITE_EVENT,
-    ERROR_EVENT
+    ERROR_EVENT,
+    TRIGGER_EVENT
 } event_e;
 
 typedef struct cb_data_t {
@@ -57,6 +59,8 @@ int loop_add_fd(
     fd_callback_f cb,
     void *data
 );
+
+void loop_trigger_fd(loop_t *loop, int fd, fd_callback_f cb, void *data);
 
 void loop_remove_fd(loop_t *loop, int fd);
 

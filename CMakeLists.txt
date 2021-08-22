@@ -5,6 +5,8 @@ project(Clashkissez VERSION 0.3)
 # set(CMAKE_C_STANDARD 17)
 # set(CMAKE_C_STANDARD_REQUIRED True)
 
+find_package (mongoc-1.0 1.7 REQUIRED)
+
 add_library(loop STATIC
         "${CMAKE_CURRENT_LIST_DIR}/src/loop.c"
         "${CMAKE_CURRENT_LIST_DIR}/src/hash.c"
@@ -13,6 +15,14 @@ add_library(loop STATIC
 target_include_directories(loop PUBLIC 
         "${CMAKE_CURRENT_LIST_DIR}/include"
         "${CMAKE_CURRENT_LIST_DIR}/deps/klib"
+    )
+
+add_library(random STATIC
+    "${CMAKE_CURRENT_LIST_DIR}/src/random.c"
+)
+
+target_include_directories(random PUBLIC 
+        "${CMAKE_CURRENT_LIST_DIR}/include"
     )
 
 add_library(time_heap STATIC 
@@ -24,6 +34,14 @@ target_include_directories(time_heap PUBLIC
         "${CMAKE_CURRENT_LIST_DIR}/deps/klib"
     )
 
+add_library(queue STATIC
+        "${CMAKE_CURRENT_LIST_DIR}/src/queue.c"
+    )
+
+target_include_directories(queue PUBLIC 
+        "${CMAKE_CURRENT_LIST_DIR}/include"
+    )
+
 add_library(serialib_chess STATIC
         "${CMAKE_CURRENT_LIST_DIR}/generated/chess.c"
     )
@@ -32,7 +50,7 @@ target_include_directories(serialib_chess PUBLIC
         "${CMAKE_CURRENT_LIST_DIR}/generated"
     )
 
-target_link_libraries(loop PUBLIC time_heap)
+target_link_libraries(loop PUBLIC time_heap queue pthread)
 
 add_executable(chess_server
         "${CMAKE_CURRENT_LIST_DIR}/src/server.c"
@@ -44,11 +62,17 @@ target_include_directories(chess_server PUBLIC
 
 target_compile_definitions(chess_server PRIVATE -D_GNU_SOURCE)
 
-target_link_libraries(chess_server PUBLIC
+target_link_libraries(chess_server
+        PUBLIC
         serialib_chess
         rt
         loop
+        queue
         time_heap
+        pthread
+        random
+        PRIVATE
+        mongo::mongoc_shared
     )
 
 add_executable(loop_test "${CMAKE_CURRENT_LIST_DIR}/test/loop_test.c")

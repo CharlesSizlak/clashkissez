@@ -7,6 +7,7 @@
 #include "loop.h"
 #include "hash.h"
 #include "time_heap.h"
+#include "queue.h"
 #include "debug.h"
 
 static bool signals_received[_NSIG];
@@ -74,11 +75,15 @@ void loop_init(loop_t *loop)
     loop->timer_map = kh_init_sz_map();
     sigemptyset(&loop->sigset);
     loop->heap = heap_create();
+    loop->pending_fd_callbacks = queue_new();
+    loop->running = true;
+    loop->thread_id = pthread_self();
 }
 
 int loop_add_fd(loop_t *loop, int fd, event_e event,
         fd_callback_f cb, void *data)
 {
+    DEBUG_PRINTF("Setting fd %d to %x", fd, (int)event);
     struct epoll_event ev;
     switch (event)
     {
@@ -117,6 +122,21 @@ void loop_remove_fd(loop_t *loop, int fd)
     poll_item_t *poll_item = hash_remove(loop->fd_map, fd);
     free(poll_item);
     epoll_ctl(loop->epoll_fd, EPOLL_CTL_DEL, fd, NULL);
+}
+
+/*
+ * Called from a thread other than the loop's thread. Interrupts the
+ * call to poll and queues an fd callback.
+ */
+void loop_trigger_fd(loop_t *loop, int fd, fd_callback_f cb, void *data)
+{
+    DEBUG_PRINTF("loop_trigger_fd");
+    poll_item_t *poll_item = malloc(sizeof(poll_item_t));
+    poll_item->cb = cb;
+    poll_item->fd = fd;
+    poll_item->data = data;
+    queue_enqueue(loop->pending_fd_callbacks, poll_item);
+    pthread_kill(loop->thread_id, SIGUSR1);
 }
 
 //TODO test things to make sure they actually exist
@@ -162,7 +182,6 @@ void loop_update_timer(loop_t *loop, size_t id, struct timespec *timer)
 int loop_run(loop_t *loop) 
 {
     DEBUG_PRINTF("Entering loop!");
-    loop->running = true;
     struct epoll_event event;
     int epoll_return;
     size_t id;
@@ -193,6 +212,16 @@ int loop_run(loop_t *loop)
     while (loop->running)
     {
         DEBUG_PRINTF("In the while loop of the loop!");
+
+        // Check for pending callbacks
+        while (true) {
+            poll_item_t *poll_item = queue_try_dequeue(loop->pending_fd_callbacks);
+            if (poll_item == NULL) {
+                break;
+            }
+            poll_item->cb(loop, TRIGGER_EVENT, poll_item->fd, poll_item->data);
+        }
+
         // Note for self, argument #4 is a int timer that blocks for
         // that many milliseconds, measured against CLOCK_MONOTONIC
         TIMER_CHECK:
@@ -256,6 +285,7 @@ int loop_run(loop_t *loop)
             }
             else if (event.events & EPOLLOUT)
             {
+                DEBUG_PRINTF("Write event received on fd %d", poll_item->fd);
                 cb_event = WRITE_EVENT;
             }
             poll_item->cb(loop, cb_event, poll_item->fd, poll_item->data);
