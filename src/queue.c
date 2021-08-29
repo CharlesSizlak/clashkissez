@@ -15,7 +15,6 @@ queue_t *queue_new(void) {
 }
 
 void queue_enqueue(queue_t *queue, void *ptr) {
-    DEBUG_PRINTF("Starting to enqueue");
     queue_node_t *new_node = calloc(1, sizeof(queue_node_t));
     new_node->data = ptr;
     pthread_mutex_lock(&queue->lock);
@@ -29,7 +28,6 @@ void queue_enqueue(queue_t *queue, void *ptr) {
     }
     pthread_mutex_unlock(&queue->lock);
     sem_post(&queue->semaphore);
-    DEBUG_PRINTF("Data successfully enqueued");
 }
 
 void *queue_dequeue(queue_t *queue) {
@@ -46,7 +44,6 @@ void *queue_dequeue(queue_t *queue) {
         queue->head = next;
         pthread_mutex_unlock(&queue->lock);
         free(old_head);
-        DEBUG_PRINTF("Data successfully dequeued");
         return data;
     }
 }

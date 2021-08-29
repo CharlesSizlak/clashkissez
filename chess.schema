@@ -18,7 +18,8 @@ enum Error:byte {
     NOT_IMPLEMENTED_ERROR, 
     LOGIN_FAILED_ERROR, 
     REGISTER_FAILED_ERROR,
-    ILLEGAL_MOVE_ERROR
+    ILLEGAL_MOVE_ERROR,
+    INTERNAL_SERVER_ERROR
 }
 
 // All measurements of time are in milliseconds

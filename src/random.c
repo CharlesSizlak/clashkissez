@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 static int fd;
 

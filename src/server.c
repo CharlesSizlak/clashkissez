@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <mongoc/mongoc.h>
+#include <openssl/evp.h>
 #include "queue.h"
 #include "hash.h"
 #include "chess.h"
@@ -15,8 +16,13 @@
 #include "debug.h"
 #include "random.h"
 
-#define APP_NAME    "clashkissez"
-#define TOKEN_SIZE  16
+#define APP_NAME        "clashkissez"
+#define TOKEN_SIZE      16
+
+// Used for hashing passwords
+#define SALT_SIZE       16
+#define ITERATION_COUNT 10000
+#define HASH_SIZE       16
 
 typedef enum database_operation_e {
     QUERY,
@@ -73,9 +79,30 @@ static server_ctx_t server_ctx;
 
 static void read_write_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connection_ctx);
 static void register_request_continue(request_ctx_t *ctx, bson_t **results);
-static void register_request_3(request_ctx_t *ctx, bson_t *result);
+static void register_request_finish(request_ctx_t *ctx, bson_t *result);
+static void login_request_finish(request_ctx_t *ctx, bson_t **results);
 static void database_query(request_ctx_t *ctx, database_collection_e collection, bson_t *query, database_callback_f cb);
 static void database_insert(request_ctx_t *ctx, database_collection_e collection, bson_t *insert, database_callback_f cb);
+
+static bool safe_compare(const void *a, const void *b, size_t length) {
+    int result = 0;
+    for (size_t i=0; i < length; i++) {
+        result |= ((const uint8_t *)a)[i] ^ ((const uint8_t *)b)[i];
+    }
+    return result == 0;
+}
+
+static void results_free(bson_t **results) {
+    for (size_t i = 0;; i++)
+    {
+        bson_t *document = results[i];
+        if (document == NULL) {
+            break;
+        }
+        bson_destroy(document);
+    }
+    free(results);
+}
 
 static uint8_t *generate_session_token(void) {
     uint8_t *session_token = malloc(TOKEN_SIZE);
@@ -112,7 +139,6 @@ void ignore_handler(loop_t *loop, int signal, void *data) {
 }
 
 void queue_write(request_ctx_t *request_ctx, uint8_t *buffer, size_t buffer_size) {
-    DEBUG_PRINTF("Queueing up a write");
     connection_ctx_t *ctx = request_ctx->connection_ctx;
     if (ctx->bytes_to_write + buffer_size > ctx->write_buffer_capacity) {
         do {
@@ -152,9 +178,7 @@ void invalid_packet_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
 }
 
 
-// TODO hey we're starting here, got to make register request work then login :)
 void register_request_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
-    DEBUG_PRINTF("Made it into the handler");
     // Pull out the username, check to see if it already exists in our database
     char *username;
     char *password;
@@ -164,36 +188,18 @@ void register_request_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
         invalid_packet_handler(loop, fd, ctx);
         return;
     }
-    /*
-     *  Users
-     {
-         Does the username already exist in the database
-         AKA
-         Does the username exactly match an existing entry in the database
-         "username": "Sizlak"
-     }
-     */
     bson_t *query = bson_new();
     BSON_APPEND_UTF8(query, "username", username);
     database_query(ctx, USERS, query, (database_callback_f)register_request_continue);
 }
 
 static void register_request_continue(request_ctx_t *ctx, bson_t **results) {
-    DEBUG_PRINTF("Made it into continue");
     // Check if there are any results. If there are results, pack up and send a register failed
     // error, then iterate over results and free the documents there.
     if (results[0] != NULL) {
         queue_error(ctx, REGISTER_FAILED_ERROR);
         RegisterRequest_free(ctx->message);
-        for (size_t i = 0;; i++)
-        {
-            bson_t *document = results[i];
-            if (document == NULL) {
-                break;
-            }
-            bson_destroy(document);
-        }
-        free(results);
+        results_free(results);
         free(ctx);
         return;
     }
@@ -202,24 +208,38 @@ static void register_request_continue(request_ctx_t *ctx, bson_t **results) {
     char *password;
     RegisterRequest_get_username(ctx->message, &username);
     RegisterRequest_get_password(ctx->message, &password);
+
+    // Generate a salt
+    uint8_t salt[SALT_SIZE];
+    rand_get_bytes(salt, SALT_SIZE);
+
+    // Hash the password
+    uint8_t hashed_password[HASH_SIZE];
+    
+    PKCS5_PBKDF2_HMAC_SHA1(
+        password, 
+        strlen(password), 
+        salt, 
+        SALT_SIZE, 
+        ITERATION_COUNT, 
+        HASH_SIZE, 
+        hashed_password
+    );
+
+
     bson_t *insert = bson_new();
     BSON_APPEND_UTF8(insert, "username", username);
-    BSON_APPEND_UTF8(insert, "password", password);
+    BSON_APPEND_UTF8(insert, "debug_password", password);
+    // Append the salt and the hashed password to the document
+    BSON_APPEND_BINARY(insert, "password", BSON_SUBTYPE_BINARY, hashed_password, HASH_SIZE);
+    BSON_APPEND_BINARY(insert, "salt", BSON_SUBTYPE_BINARY, salt, SALT_SIZE);
+
     bson_oid_init(&ctx->oid, NULL);
     BSON_APPEND_OID(insert, "_id", &ctx->oid);
-    /*
-    {
-        "username": "Sizlak",
-        "password": "1234"
-    }
-    */
-    database_insert(ctx, USERS, insert, (database_callback_f)register_request_3);
+    database_insert(ctx, USERS, insert, (database_callback_f)register_request_finish);
 }
 
-
-// TODO rename this, test to see if we succesfully send a session token back
-// TODO fix the double free problem
-static void register_request_3(request_ctx_t *ctx, bson_t *result) {
+static void register_request_finish(request_ctx_t *ctx, bson_t *result) {
     int32_t insertedCount = 0;
     if (bson_has_field(result, "insertedCount"))
     {
@@ -239,7 +259,7 @@ static void register_request_3(request_ctx_t *ctx, bson_t *result) {
         BSON_APPEND_UTF8(insert, "password", password);
         bson_oid_init(&ctx->oid, NULL);
         BSON_APPEND_OID(insert, "_id", &ctx->oid);
-        database_insert(ctx, USERS, insert, (database_callback_f)register_request_3);
+        database_insert(ctx, USERS, insert, (database_callback_f)register_request_finish);
         return;
     }
     bson_oid_t *oid = malloc(sizeof(bson_oid_t));
@@ -247,7 +267,6 @@ static void register_request_3(request_ctx_t *ctx, bson_t *result) {
     uint8_t *session_token = generate_session_token();
     char *str_token = session_token_to_str(session_token);
     str_hash_add(server_ctx.session_tokens, str_token, oid);
-    free(str_token);
     RegisterReply_t *r = RegisterReply_new();
     RegisterReply_set_session_token(r, session_token);
     free(session_token);
@@ -258,6 +277,112 @@ static void register_request_3(request_ctx_t *ctx, bson_t *result) {
     queue_write(ctx, buffer, buffer_size);
     free(buffer);
     RegisterRequest_free(ctx->message);
+    free(ctx);
+}
+
+void login_request_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
+    char *username;
+    char *password;
+    if (!LoginRequest_get_username(ctx->message, &username) ||
+            !LoginRequest_get_password(ctx->message, &password)) {
+        LoginRequest_free(ctx->message);
+        invalid_packet_handler(loop, fd, ctx);
+        return;
+    }
+    bson_t *query = bson_new();
+    BSON_APPEND_UTF8(query, "username", username);
+    database_query(ctx, USERS, query, (database_callback_f)login_request_finish);
+}
+
+static void login_request_finish(request_ctx_t *ctx, bson_t **results) {
+     if (results[0] == NULL) {
+        DEBUG_PRINTF("Username not found");
+        queue_error(ctx, LOGIN_FAILED_ERROR);
+        LoginRequest_free(ctx->message);
+        results_free(results);
+        free(ctx);
+        return;
+    }
+    uint8_t salt[SALT_SIZE];
+    if (bson_has_field(results[0], "salt"))
+    {
+        bson_iter_t iterator;
+        bson_iter_init(&iterator, results[0]);
+        bson_iter_find(&iterator, "salt");
+        const bson_value_t *value = bson_iter_value(&iterator);
+        memcpy(salt, value->value.v_binary.data, SALT_SIZE);
+    }
+    else 
+    {
+        queue_error(ctx, INTERNAL_SERVER_ERROR);
+        LoginRequest_free(ctx->message);
+        results_free(results);
+        free(ctx);
+        return;
+    }
+    char *password;
+    LoginRequest_get_password(ctx->message, &password);
+
+    uint8_t hashed_password[HASH_SIZE];
+    PKCS5_PBKDF2_HMAC_SHA1(
+        password, 
+        strlen(password), 
+        salt, 
+        SALT_SIZE, 
+        ITERATION_COUNT, 
+        HASH_SIZE, 
+        hashed_password
+    );
+
+    uint8_t reference_password[HASH_SIZE];
+    if (bson_has_field(results[0], "password"))
+    {
+        bson_iter_t iterator;
+        bson_iter_init(&iterator, results[0]);
+        bson_iter_find(&iterator, "password");
+        const bson_value_t *value = bson_iter_value(&iterator);
+        memcpy(reference_password, value->value.v_binary.data, HASH_SIZE);
+    }
+    else 
+    {
+        queue_error(ctx, INTERNAL_SERVER_ERROR);
+        LoginRequest_free(ctx->message);
+        results_free(results);
+        free(ctx);
+        return;
+    }
+    if (!safe_compare(hashed_password, reference_password, HASH_SIZE)) {
+        DEBUG_PRINTF("Incorrect password");
+        queue_error(ctx, LOGIN_FAILED_ERROR);
+        LoginRequest_free(ctx->message);
+        results_free(results);
+        free(ctx);
+        return;
+    }
+
+    uint8_t *session_token = generate_session_token();
+    char *str_token = session_token_to_str(session_token);
+    bson_oid_t *oid = malloc(sizeof(bson_oid_t));
+    if (bson_has_field(results[0], "_id"))
+    {
+        bson_iter_t iterator;
+        bson_iter_init(&iterator, results[0]);
+        bson_iter_find(&iterator, "_id");
+        const bson_value_t *value = bson_iter_value(&iterator);
+        bson_oid_copy(&value->value.v_oid, oid);
+    }
+    str_hash_add(server_ctx.session_tokens, str_token, oid);
+    LoginReply_t *r = LoginReply_new();
+    LoginReply_set_session_token(r, session_token);
+    free(session_token);
+    size_t buffer_size;
+    uint8_t *buffer;
+    LoginReply_serialize(r, &buffer, &buffer_size);
+    LoginReply_free(r);
+    queue_write(ctx, buffer, buffer_size);
+    free(buffer);
+    results_free(results);
+    LoginRequest_free(ctx->message);
     free(ctx);
 }
 
@@ -278,11 +403,13 @@ void message_handler(loop_t *loop, int fd, connection_ctx_t *connection_ctx)  {
     TableType_e table_type = determine_table_type(message, message_length);
     switch (table_type) {
         case TABLE_TYPE_LoginRequest: {
-            DEBUG_PRINTF("Login request not implemented");
-            not_implemented_handler(loop, fd, request_ctx);
+            DEBUG_PRINTF("Received login request");
+            request_ctx->message = LoginRequest_deserialize(message, message_length);
+            login_request_handler(loop, fd, request_ctx);
         }
         break;
         case TABLE_TYPE_RegisterRequest: {
+            DEBUG_PRINTF("Received register request");
             request_ctx->message = RegisterRequest_deserialize(message, message_length);
             register_request_handler(loop, fd, request_ctx);
         }
@@ -424,13 +551,6 @@ void read_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connect
     if (connection_ctx->total_bytes_read < message_length + 4) {
         return;
     }
-    DEBUG_PRINTF("About to call message handler, bytes received: %u\n", connection_ctx->total_bytes_read);
-    DEBUG_PRINTF("Read buffer: %02x%02x%02x%02x%02x\n",
-        connection_ctx->read_buffer[0],
-        connection_ctx->read_buffer[1],
-        connection_ctx->read_buffer[2],
-        connection_ctx->read_buffer[3],
-        connection_ctx->read_buffer[4]);
     message_handler(loop, fd, connection_ctx);
     return;
   clean_up:
@@ -445,7 +565,6 @@ void read_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connect
 }
 
 void write_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connection_ctx) {
-    DEBUG_PRINTF("Entered write handler");
     if (event == ERROR_EVENT) {
         #ifndef NDEBUG
         int       error = 0;
@@ -461,7 +580,6 @@ void write_handler(loop_t *loop, event_e event, int fd, connection_ctx_t *connec
     if (bytes_written == -1) {
         goto clean_up;
     }
-    DEBUG_PRINTF("Wrote %zd", bytes_written);
     connection_ctx->bytes_to_write -= bytes_written;
     if (connection_ctx->bytes_to_write != 0) {
         memmove(
@@ -530,7 +648,7 @@ void accept_connection_cb(loop_t *loop, event_e event, int fd, void *data)
         printf("Failed to accept connection bruv.\n");
         return;
     }
-    printf("Connection accepted!\n");
+    DEBUG_PRINTF("Connection accepted!");
     connection_ctx_t *connection_ctx = malloc(sizeof(connection_ctx_t));
     connection_ctx->total_bytes_read = 0;
     connection_ctx->read_buffer = malloc(4096);
@@ -541,7 +659,7 @@ void accept_connection_cb(loop_t *loop, event_e event, int fd, void *data)
     connection_ctx->fd = conn_fd;
     connection_ctx->close_connection = false;
     connection_ctx->loop = loop;
-    hash_add(server_ctx.connection_contexts, fd, connection_ctx);
+    hash_add(server_ctx.connection_contexts, conn_fd, connection_ctx);
     loop_add_fd(loop, conn_fd, READ_EVENT, (fd_callback_f)read_handler, connection_ctx);
     // In the instance we accept a connection, check their message against
     // a table of legal incoming messages
@@ -555,13 +673,11 @@ void accept_connection_cb(loop_t *loop, event_e event, int fd, void *data)
 
 void database_result_handler(loop_t *loop, event_e event, int fd, database_operation_t *data)
 {
-    DEBUG_PRINTF("Running database_result_handler");
     data->cb(data->ctx, data->result);
     free(data);
 }
 
 static void database_query(request_ctx_t *ctx, database_collection_e collection, bson_t *query, database_callback_f cb) {
-    DEBUG_PRINTF("Enqueueing query");
     database_operation_t *data = malloc(sizeof(database_operation_t));
     data->collection = collection;
     data->query = query;
@@ -595,12 +711,15 @@ void *database_thread(loop_t *loop)
     bson_t *result = NULL;
     
     while (loop->running) {
+        // Get an operation from the queue
+        database_operation_t *data = queue_dequeue(server_ctx.database_queue);
+        if (data == NULL)
+        {
+            break;
+        }
         size_t result_count = 0;
         size_t result_capacity = 32;
         bson_t **results = malloc((result_capacity + 1) * sizeof(bson_t *));
-        // Get an operation from the queue
-        database_operation_t *data = queue_dequeue(server_ctx.database_queue);
-        DEBUG_PRINTF("Dequeued operation from queue");
         // Get the appropriate collection
         switch (data->collection)
         {
@@ -608,13 +727,14 @@ void *database_thread(loop_t *loop)
                 collection = user_collection;
             break;
             default:
-                return NULL;
+                data->result = NULL;
+                loop_trigger_fd(loop, data->ctx->connection_ctx->fd, (fd_callback_f)database_result_handler, data);
+                continue;
         }
         // Perform the operation
         switch (data->operation)
         {
         case QUERY:
-            DEBUG_PRINTF("Issuing query to database");
             cursor = mongoc_collection_find_with_opts(collection, data->query, NULL, NULL);
             while (mongoc_cursor_next (cursor, &document)) {
                 result = bson_copy(document);
@@ -627,7 +747,6 @@ void *database_thread(loop_t *loop)
             }
             data->result = results;
             results[result_count] = NULL;
-            DEBUG_PRINTF("Trigger result handler on query callback");
             loop_trigger_fd(loop, data->ctx->connection_ctx->fd, (fd_callback_f)database_result_handler, data);
             bson_destroy(data->query);
             mongoc_cursor_destroy(cursor);
@@ -668,7 +787,9 @@ void *database_thread(loop_t *loop)
             bson_destroy(data->delete);
         break;
         default:
-            return NULL;
+            data->result = NULL;
+            loop_trigger_fd(loop, data->ctx->connection_ctx->fd, (fd_callback_f)database_result_handler, data);
+            continue;
         }
     }
     mongoc_collection_destroy(user_collection);
@@ -700,7 +821,6 @@ int main(int argc, char **arg)
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof reuse);
 #endif
 
-    // TODO at some point catch anything killing us that isn't sigkill, so we can clean up our trash
 
     // bind to the socket
     struct sockaddr_in server_addr = {0};
@@ -738,7 +858,11 @@ int main(int argc, char **arg)
     pthread_t database_thread_id;
     pthread_create(&database_thread_id, NULL, (thread_f)database_thread, loop);
 
+    printf("Starting the server\n");
     loop_run(loop);
+    printf("Server closing\n");
+    queue_enqueue(server_ctx.database_queue, NULL);
+    pthread_join(database_thread_id, NULL);
     loop_fini(loop);
 
     int fd;
@@ -751,61 +875,18 @@ int main(int argc, char **arg)
         close(fd);
     })
     kh_destroy_map(server_ctx.connection_contexts);
+    const char *token;
+    bson_oid_t *oid;
+    kh_foreach(server_ctx.session_tokens, token, oid, {
+        free(oid);
+        free((char *)token);
+    })
+    kh_destroy_str_map(server_ctx.session_tokens);
+
+    queue_free(server_ctx.database_queue);
 
     shutdown(server_fd, SHUT_RDWR);
     close(server_fd);
     rand_cleanup();
-
-
-    /*
-
-    list of file descriptors we're interested in
-    file descriptors ready2go
-
-    in our loop going brr one of our FD's is awake and ready to go
-    check the event registered in FD's loop struct, check to see exactly what's going on
-    run code ezpz
-
-    if it's a new connection, we go ahead and try accepting that connection
-    if we succeed, slap that in our event loop as an interested fd
-    play with the ttl of the fd as wanted depending on what we feel like
-
-    if it's an existing connection, we're going to check the incoming packet
-    hash the serialized type of the packet and check it against a table of legal messages
-    if it's legal, send the appropriate response
-    keep the fd open on the instance we need to send a notif
-    if it's illegal, close the connection and get rid of the fd from the event loop
-
-    now for the rough part, doing chess things
-    
-    You know, we never have a moment where we're really doing a lot
-    everything is either a response as a result of a packet coming in, or a response
-    to our chess engine replying to us
-
-    If it's our chess engine FD, we send out the appropriate notification if
-    there's a fd asssociated with that game it's talking about
-
-    TIMERS
-    we have a list of games we're currently managing. We need to have ID's
-    to pass around to the chess engine FD's to know what the f*!# they're talking about
-
-    questions for ben
-    A) can we make this the kernel's problem and have them YEET us a wakey
-    in the instance that a timer hits 0
-
-    B) ask ben about writing data into a file in a way that isn't terrible
-
-    C) currently we don't plan to store draw offers anywhere, so 
-    if a player misses the notification they just don't know it happened
-    boy that seems annoying to solve if we want them to get it
-
-    cursory exploration looks like we can in fact make this the kernel's problem
-
-    timers we actually care about
-    A) how long a connection fd lives before closing
-    C) the timer associated with each players clock in a match
-
-    
-    return 0;
-    */
+    printf("Server closed\n");
 }

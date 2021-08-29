@@ -7,6 +7,10 @@ project(Clashkissez VERSION 0.3)
 
 find_package (mongoc-1.0 1.7 REQUIRED)
 
+find_library(SSL_LIB libssl.so REQUIRED)
+find_library(CRYPTO_LIB libcrypto.so REQUIRED)
+
+
 add_library(loop STATIC
         "${CMAKE_CURRENT_LIST_DIR}/src/loop.c"
         "${CMAKE_CURRENT_LIST_DIR}/src/hash.c"
@@ -71,6 +75,8 @@ target_link_libraries(chess_server
         time_heap
         pthread
         random
+        ${SSL_LIB}
+        ${CRYPTO_LIB}
         PRIVATE
         mongo::mongoc_shared
     )

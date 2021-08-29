@@ -83,7 +83,6 @@ void loop_init(loop_t *loop)
 int loop_add_fd(loop_t *loop, int fd, event_e event,
         fd_callback_f cb, void *data)
 {
-    DEBUG_PRINTF("Setting fd %d to %x", fd, (int)event);
     struct epoll_event ev;
     switch (event)
     {
@@ -130,7 +129,6 @@ void loop_remove_fd(loop_t *loop, int fd)
  */
 void loop_trigger_fd(loop_t *loop, int fd, fd_callback_f cb, void *data)
 {
-    DEBUG_PRINTF("loop_trigger_fd");
     poll_item_t *poll_item = malloc(sizeof(poll_item_t));
     poll_item->cb = cb;
     poll_item->fd = fd;
@@ -138,8 +136,6 @@ void loop_trigger_fd(loop_t *loop, int fd, fd_callback_f cb, void *data)
     queue_enqueue(loop->pending_fd_callbacks, poll_item);
     pthread_kill(loop->thread_id, SIGUSR1);
 }
-
-//TODO test things to make sure they actually exist
 
 void loop_add_signal(loop_t *loop, int signum, 
     signal_callback_f cb, void *data)
@@ -205,13 +201,11 @@ int loop_run(loop_t *loop)
             DEBUG_PRINTF("sigaction failed: %s", strerror(errno));
             return -1;
         }
-        DEBUG_PRINTF("Initializing oldacts[%d]\n", i);
     }
 
     // Call epoll_wait until loop->running becomes false
     while (loop->running)
     {
-        DEBUG_PRINTF("In the while loop of the loop!");
 
         // Check for pending callbacks
         while (true) {
@@ -220,6 +214,7 @@ int loop_run(loop_t *loop)
                 break;
             }
             poll_item->cb(loop, TRIGGER_EVENT, poll_item->fd, poll_item->data);
+            free(poll_item);
         }
 
         // Note for self, argument #4 is a int timer that blocks for
@@ -285,7 +280,6 @@ int loop_run(loop_t *loop)
             }
             else if (event.events & EPOLLOUT)
             {
-                DEBUG_PRINTF("Write event received on fd %d", poll_item->fd);
                 cb_event = WRITE_EVENT;
             }
             poll_item->cb(loop, cb_event, poll_item->fd, poll_item->data);
@@ -299,7 +293,6 @@ int loop_run(loop_t *loop)
             continue;
         }
         int signum = kh_key(loop->sig_map, i);
-        DEBUG_PRINTF("Restoring oldacts[%d]\n", signum);
         if (sigaction(signum, &oldacts[signum], NULL) == -1)
         {
             return -1;
@@ -326,5 +319,6 @@ void loop_fini(loop_t *loop)
     kh_destroy_map(loop->sig_map);
     kh_destroy_sz_map(loop->timer_map);
     heap_free(loop->heap);
+    queue_free(loop->pending_fd_callbacks);
     close(loop->epoll_fd);
 }
