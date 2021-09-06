@@ -29,6 +29,14 @@ target_include_directories(random PUBLIC
         "${CMAKE_CURRENT_LIST_DIR}/include"
     )
 
+add_library(vector STATIC
+    "${CMAKE_CURRENT_LIST_DIR}/src/vector.c"
+)
+
+target_include_directories(vector PUBLIC 
+        "${CMAKE_CURRENT_LIST_DIR}/include"
+    )
+
 add_library(time_heap STATIC 
         "${CMAKE_CURRENT_LIST_DIR}/src/time_heap.c"
     )
@@ -75,6 +83,7 @@ target_link_libraries(chess_server
         time_heap
         pthread
         random
+        vector
         ${SSL_LIB}
         ${CRYPTO_LIB}
         PRIVATE

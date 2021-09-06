@@ -15,9 +15,11 @@
 #include "loop.h"
 #include "debug.h"
 #include "random.h"
+#include "vector.h"
 
 #define APP_NAME        "clashkissez"
 #define TOKEN_SIZE      16
+#define SID_SIZE        25
 
 // Used for hashing passwords
 #define SALT_SIZE       16
@@ -73,6 +75,11 @@ typedef struct server_ctx_t {
     kh_map_t *connection_contexts;
     kh_str_map_t *session_tokens;
     queue_t *database_queue;
+    kh_str_map_t *game_invite_subscriptions;
+    kh_str_map_t *game_accept_subscriptions;
+    kh_str_map_t *game_subscriptions;
+    kh_str_map_t *friend_request_subscriptions;
+    kh_str_map_t *friend_request_accepted_subscriptions;
 } server_ctx_t;
 
 static server_ctx_t server_ctx;
@@ -83,6 +90,27 @@ static void register_request_finish(request_ctx_t *ctx, bson_t *result);
 static void login_request_finish(request_ctx_t *ctx, bson_t **results);
 static void database_query(request_ctx_t *ctx, database_collection_e collection, bson_t *query, database_callback_f cb);
 static void database_insert(request_ctx_t *ctx, database_collection_e collection, bson_t *insert, database_callback_f cb);
+static void game_invite_2(request_ctx_t *ctx, bson_t **results);
+static char *session_token_to_str(uint8_t *session_token);
+static void queue_error(request_ctx_t *ctx, Error_e error);
+
+static bool add_subscription(request_ctx_t *ctx, kh_str_map_t *hashtable, uint8_t *token) {
+    char *str_token = session_token_to_str(token);
+    bson_oid_t *oid = str_hash_get(server_ctx.session_tokens, str_token);
+    if (oid == NULL) {
+        queue_error(ctx, INVALID_SESSION_TOKEN);
+       return false;
+    }
+    char *sid = malloc(SID_SIZE);
+    bson_oid_to_string(oid, sid);
+    int_vector_t *vector = str_hash_get(hashtable, sid);
+    if (vector == NULL) {
+        vector = int_vector_new(1);
+        str_hash_add(hashtable, sid, vector);
+    }
+    int_vector_append(vector, ctx->connection_ctx->fd);
+    return true;
+}
 
 static bool safe_compare(const void *a, const void *b, size_t length) {
     int result = 0;
@@ -138,7 +166,7 @@ void ignore_handler(loop_t *loop, int signal, void *data) {
     // Do nothing
 }
 
-void queue_write(request_ctx_t *request_ctx, uint8_t *buffer, size_t buffer_size) {
+static void queue_write(request_ctx_t *request_ctx, uint8_t *buffer, size_t buffer_size) {
     connection_ctx_t *ctx = request_ctx->connection_ctx;
     if (ctx->bytes_to_write + buffer_size > ctx->write_buffer_capacity) {
         do {
@@ -151,7 +179,7 @@ void queue_write(request_ctx_t *request_ctx, uint8_t *buffer, size_t buffer_size
     loop_add_fd(ctx->loop, ctx->fd, READ_WRITE_EVENT, (fd_callback_f)read_write_handler, ctx);
 }
 
-void queue_error(request_ctx_t *ctx, Error_e error) {
+static void queue_error(request_ctx_t *ctx, Error_e error) {
     DEBUG_PRINTF("Queueing up an error to send");
     ErrorReply_t *e = ErrorReply_new();
     ErrorReply_set_error(e, error);
@@ -386,6 +414,131 @@ static void login_request_finish(request_ctx_t *ctx, bson_t **results) {
     free(ctx);
 }
 
+void game_invite_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
+    uint8_t *token;
+    if (!GameInviteRequest_get_session_token(ctx->message, &token)) {
+        queue_error(ctx, INVALID_PACKET_ERROR);
+        GameInviteRequest_free(ctx->message);
+        free(ctx);
+        return;
+    }
+    char *str_token = session_token_to_str(token);
+    bson_oid_t *oid = str_hash_get(server_ctx.session_tokens, str_token);
+    if (oid == NULL) {
+        queue_error(ctx, INVALID_SESSION_TOKEN);
+        GameInviteRequest_free(ctx->message);
+        free(ctx);
+        return;
+    }
+    char *username;
+    GameInviteRequest_get_username(ctx->message, &username);
+    bson_t *query = bson_new();
+    BSON_APPEND_UTF8(query, "username", username);
+    database_query(ctx, USERS, query, (database_callback_f)game_invite_2);
+}
+
+static void game_invite_2(request_ctx_t *ctx, bson_t **results) {
+    if (results[0] != NULL) {
+        queue_error(ctx, USER_DOESNT_EXIST_ERROR);
+        RegisterRequest_free(ctx->message);
+        results_free(results);
+        free(ctx);
+        return;
+    }
+    /*
+    example of pulling out a field for later
+    if (bson_has_field(results[0], ""))
+    {
+        bson_iter_t iterator;
+        bson_iter_init(&iterator, results[0]);
+        bson_iter_find(&iterator, "");
+        const bson_value_t *value = bson_iter_value(&iterator);
+        memcpy(salt, value->value.v_binary.data, SALT_SIZE);
+    }
+    TODO pick up here later
+    */
+}
+
+void game_invite_subscribe_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
+    // We'll need to map oid's to a vector of fd's
+    uint8_t *token;
+    if (!GameInviteSubscribe_get_session_token(ctx->message, &token)) {
+        queue_error(ctx, INVALID_PACKET_ERROR);
+        goto ERROR;
+    }
+    if (!add_subscription(ctx, server_ctx.game_invite_subscriptions, token)) {
+        goto ERROR;
+    }
+
+    // Fall-through
+  ERROR:
+    GameInviteSubscribe_free(ctx->message);
+    free(ctx);
+}
+
+void game_accept_subscribe_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
+    uint8_t *token;
+    if (!GameAcceptSubscribe_get_session_token(ctx->message, &token)) {
+        queue_error(ctx, INVALID_PACKET_ERROR);
+        goto ERROR;
+    }
+    if (!add_subscription(ctx, server_ctx.game_accept_subscriptions, token)) {
+        goto ERROR;
+    }
+
+    // Fall-through
+  ERROR:
+    GameAcceptSubscribe_free(ctx->message);
+    free(ctx);
+}
+
+void game_subscribe_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
+    uint8_t *token;
+    if (!GameSubscribe_get_session_token(ctx->message, &token)) {
+        queue_error(ctx, INVALID_PACKET_ERROR);
+        goto ERROR;
+    }
+    if (!add_subscription(ctx, server_ctx.game_subscriptions, token)) {
+        goto ERROR;
+    }
+    // Fall-through
+  ERROR:
+    GameSubscribe_free(ctx->message);
+    free(ctx);
+}
+
+void friend_request_subscribe_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
+    uint8_t *token;
+    if (!FriendRequestSubscribe_get_session_token(ctx->message, &token)) {
+        queue_error(ctx, INVALID_PACKET_ERROR);
+        goto ERROR;
+    }
+    if (!add_subscription(ctx, server_ctx.friend_request_subscriptions, token)) {
+        goto ERROR;
+    }
+
+    // Fall-through
+  ERROR:
+    FriendRequestSubscribe_free(ctx->message);
+    free(ctx);
+}
+
+void friend_request_accepted_subscribe_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
+    uint8_t *token;
+    if (!FriendRequestAcceptedSubscribe_get_session_token(ctx->message, &token)) {
+        queue_error(ctx, INVALID_PACKET_ERROR);
+        goto ERROR;
+    }
+    if (!add_subscription(ctx, server_ctx.friend_request_accepted_subscriptions, token)) {
+        goto ERROR;
+    }
+
+    // Fall-through
+  ERROR:
+    FriendRequestAcceptedSubscribe_free(ctx->message);
+    free(ctx);
+}
+
 void message_handler(loop_t *loop, int fd, connection_ctx_t *connection_ctx)  {
     uint8_t *message = connection_ctx->read_buffer + 4;
     uint32_t message_length = be32toh(*(uint32_t*)connection_ctx->read_buffer);
@@ -420,8 +573,9 @@ void message_handler(loop_t *loop, int fd, connection_ctx_t *connection_ctx)  {
         }
         break;
         case TABLE_TYPE_GameInviteRequest: {
-            DEBUG_PRINTF("GameInvite request not implemented");
-            not_implemented_handler(loop, fd, request_ctx);
+            DEBUG_PRINTF("GameInvite request");
+            request_ctx->message = GameInviteRequest_deserialize(message, message_length);
+            game_invite_handler(loop, fd, request_ctx);
         }
         break;
         case TABLE_TYPE_GameAcceptRequest: {
@@ -491,6 +645,32 @@ void message_handler(loop_t *loop, int fd, connection_ctx_t *connection_ctx)  {
         break;
         case TABLE_TYPE_PastGameFullInformationRequest: {
             DEBUG_PRINTF("PastGameFullInformation request not implemented");
+            not_implemented_handler(loop, fd, request_ctx);
+        }
+        break;
+        case TABLE_TYPE_GameInviteSubscribe: {
+            DEBUG_PRINTF("GameInviteSubscribe request");
+            request_ctx->message = GameInviteSubscribe_deserialize(message, message_length);
+            game_invite_subscribe_handler(loop, fd, request_ctx);
+        }
+        break;
+        case TABLE_TYPE_GameAcceptSubscribe: {
+            DEBUG_PRINTF("GameAcceptSubscribe request not implemented");
+            not_implemented_handler(loop, fd, request_ctx);
+        }
+        break;
+        case TABLE_TYPE_GameSubscribe: {
+            DEBUG_PRINTF("GameSubscribe request not implemented");
+            not_implemented_handler(loop, fd, request_ctx);
+        }
+        break;
+        case TABLE_TYPE_FriendRequestSubscribe: {
+            DEBUG_PRINTF("FriendRequestSubscribe request not implemented");
+            not_implemented_handler(loop, fd, request_ctx);
+        }
+        break;
+        case TABLE_TYPE_FriendRequestAcceptedSubscribe: {
+            DEBUG_PRINTF("FriendRequestAcceptedSubscribe request not implemented");
             not_implemented_handler(loop, fd, request_ctx);
         }
         break;
@@ -847,6 +1027,11 @@ int main(int argc, char **arg)
     server_ctx.connection_contexts = kh_init_map();
     server_ctx.session_tokens = kh_init_str_map();
     server_ctx.database_queue = queue_new();
+    server_ctx.game_invite_subscriptions = kh_init_str_map();
+    server_ctx.game_accept_subscriptions = kh_init_str_map();
+    server_ctx.game_subscriptions = kh_init_str_map();
+    server_ctx.friend_request_subscriptions = kh_init_str_map();
+    server_ctx.friend_request_accepted_subscriptions = kh_init_str_map();
 
     loop_init(loop);
     
@@ -882,6 +1067,37 @@ int main(int argc, char **arg)
         free((char *)token);
     })
     kh_destroy_str_map(server_ctx.session_tokens);
+
+    /*
+    TODO clean up the OID's in each of these maps
+    */
+    const char *sid;
+    int_vector_t *vector;
+    kh_foreach(server_ctx.game_invite_subscriptions, sid, vector, {
+        free((char *)sid);
+        int_vector_free(vector);
+    })
+    kh_destroy_str_map(server_ctx.game_invite_subscriptions);
+    kh_foreach(server_ctx.game_accept_subscriptions, sid, vector, {
+        free((char *)sid);
+        int_vector_free(vector);
+    })
+    kh_destroy_str_map(server_ctx.game_accept_subscriptions);
+    kh_foreach(server_ctx.game_subscriptions, sid, vector, {
+        free((char *)sid);
+        int_vector_free(vector);
+    })
+    kh_destroy_str_map(server_ctx.game_subscriptions);
+    kh_foreach(server_ctx.friend_request_subscriptions, sid, vector, {
+        free((char *)sid);
+        int_vector_free(vector);
+    })
+    kh_destroy_str_map(server_ctx.friend_request_subscriptions);
+    kh_foreach(server_ctx.friend_request_accepted_subscriptions, sid, vector, {
+        free((char *)sid);
+        int_vector_free(vector);
+    })
+    kh_destroy_str_map(server_ctx.friend_request_accepted_subscriptions);
 
     queue_free(server_ctx.database_queue);
 
