@@ -38,7 +38,7 @@ timeval_subtract (result, x, y)
   result->tv_sec = x->tv_sec - y->tv_sec;
   result->tv_usec = x->tv_usec - y->tv_usec;
 
-  /* Return 1 if result is negative.
+  // Return 1 if result is negative.
   return x->tv_sec < y->tv_sec;
 }
 */
@@ -80,7 +80,7 @@ void loop_init(loop_t *loop)
     loop->thread_id = pthread_self();
 }
 
-int loop_add_fd(loop_t *loop, int fd, event_e event,
+void loop_add_fd(loop_t *loop, int fd, event_e event,
         fd_callback_f cb, void *data)
 {
     struct epoll_event ev;
@@ -97,7 +97,12 @@ int loop_add_fd(loop_t *loop, int fd, event_e event,
     case READ_WRITE_EVENT:
         ev.events = EPOLLIN | EPOLLOUT;
         break;
+    default:
+        DEBUG_PRINTF("Invalid event passed");
+        ev.events = 0;
+        break;
     }
+    
     if (hash_contains(loop->fd_map, fd)) {
         poll_item_t *poll_item = hash_get(loop->fd_map, fd);
         poll_item->cb = cb;
@@ -143,7 +148,7 @@ void loop_add_signal(loop_t *loop, int signum,
     sigaddset(&loop->sigset, signum);
     cb_data_t *cb_data = malloc(sizeof(cb_data_t));
     cb_data->data = data;
-    cb_data->cb = cb;
+    cb_data->cb = (void*)cb;
     hash_add(loop->sig_map, signum, cb_data);
 }
 
@@ -159,7 +164,7 @@ void loop_remove_signal(loop_t *loop, int signum)
     size_t id = heap_add(loop->heap, timer);
     cb_data_t *cb_data = malloc(sizeof(cb_data_t));
     cb_data->data = data;
-    cb_data->cb = cb;
+    cb_data->cb = (void*)cb;
     sz_hash_add(loop->timer_map, id, cb_data);
     return id;
 }
@@ -190,7 +195,7 @@ int loop_run(loop_t *loop)
     bzero(oldacts, sizeof(struct sigaction) * _NSIG);
 
     // Setup signal handlers for every added signal
-    for (int i = 0; i != kh_end(loop->sig_map); i++)
+    for (khint_t i = 0; i != kh_end(loop->sig_map); i++)
     {
 		if (!kh_exist(loop->sig_map, i)) {
             continue;
@@ -230,7 +235,7 @@ int loop_run(loop_t *loop)
                 // Then check the next timer and go until we're able to sleep
                 id = loop->heap->elements[0].id;
                 cb_data_t *timer_cb_data = sz_hash_get(loop->timer_map, id);
-                timer_callback_f timer_cb = timer_cb_data->cb;
+                timer_callback_f timer_cb = (timer_callback_f)timer_cb_data->cb;
                 timer_cb(loop, id, timer_cb_data->data);
                 if (heap_peek(loop->heap))
                 {
@@ -258,7 +263,7 @@ int loop_run(loop_t *loop)
             {
                 signals_received[i] = false;
                 cb_data_t *signal_cb_data = hash_get(loop->sig_map, i);
-                signal_callback_f signal_cb = signal_cb_data->cb;
+                signal_callback_f signal_cb = (signal_callback_f)signal_cb_data->cb;
                 if (signal_cb_data != NULL)
                 {
                     signal_cb(loop, i, signal_cb_data->data);
@@ -268,7 +273,6 @@ int loop_run(loop_t *loop)
         if (epoll_return == 1) {
             // Call the callback for the event that arrived
             poll_item_t *poll_item = event.data.ptr;
-            
             event_e cb_event;
             if (event.events & EPOLLERR)
             {
@@ -282,12 +286,16 @@ int loop_run(loop_t *loop)
             {
                 cb_event = WRITE_EVENT;
             }
+            else {
+                DEBUG_PRINTF("Invalid event");
+                cb_event = ERROR_EVENT;
+            }
             poll_item->cb(loop, cb_event, poll_item->fd, poll_item->data);
         }
     }
 
     // Restore original signal handlers
-    for (int i = 0; i != kh_end(loop->sig_map); i++)
+    for (khint_t i = 0; i != kh_end(loop->sig_map); i++)
     {
 		if (!kh_exist(loop->sig_map, i)) {
             continue;
@@ -298,6 +306,7 @@ int loop_run(loop_t *loop)
             return -1;
         }
     }
+    return 0;
 }
 
 void loop_fini(loop_t *loop)

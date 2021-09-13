@@ -52,7 +52,7 @@ typedef struct poll_item_t {
 
 void loop_init(loop_t *loop);
 
-int loop_add_fd(
+void loop_add_fd(
     loop_t *loop,
     int fd,
     event_e event,

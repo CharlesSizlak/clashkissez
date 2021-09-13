@@ -71,6 +71,8 @@ typedef struct database_operation_t {
     void *result;
 } database_operation_t;
 
+
+
 typedef struct server_ctx_t {
     kh_map_t *connection_contexts;
     kh_str_map_t *session_tokens;
@@ -93,6 +95,24 @@ static void database_insert(request_ctx_t *ctx, database_collection_e collection
 static void game_invite_2(request_ctx_t *ctx, bson_t **results);
 static char *session_token_to_str(uint8_t *session_token);
 static void queue_error(request_ctx_t *ctx, Error_e error);
+
+static bson_oid_t *get_oid(bson_t *obj) {
+    bson_oid_t *oid = malloc(sizeof(bson_oid_t));
+    bson_iter_t iterator;
+    bson_iter_init(&iterator, obj);
+    bson_iter_find(&iterator, "_id");
+    const bson_value_t *value = bson_iter_value(&iterator);
+    bson_oid_copy(&value->value.v_oid, oid);
+    return oid;
+}
+
+static char *get_sid(bson_t *obj) {
+    bson_oid_t *oid = get_oid(obj);
+    char *sid = malloc(SID_SIZE);
+    bson_oid_to_string(oid, sid);
+    free(oid);
+    return sid;
+}
 
 static bool add_subscription(request_ctx_t *ctx, kh_str_map_t *hashtable, uint8_t *token) {
     char *str_token = session_token_to_str(token);
@@ -283,8 +303,10 @@ static void register_request_finish(request_ctx_t *ctx, bson_t *result) {
         RegisterRequest_get_username(ctx->message, &username);
         RegisterRequest_get_password(ctx->message, &password);
         bson_t *insert = bson_new();
+        bson_t *array = bson_new();
         BSON_APPEND_UTF8(insert, "username", username);
         BSON_APPEND_UTF8(insert, "password", password);
+        BSON_APPEND_ARRAY(insert, "pending game invites", array);
         bson_oid_init(&ctx->oid, NULL);
         BSON_APPEND_OID(insert, "_id", &ctx->oid);
         database_insert(ctx, USERS, insert, (database_callback_f)register_request_finish);
@@ -390,15 +412,7 @@ static void login_request_finish(request_ctx_t *ctx, bson_t **results) {
 
     uint8_t *session_token = generate_session_token();
     char *str_token = session_token_to_str(session_token);
-    bson_oid_t *oid = malloc(sizeof(bson_oid_t));
-    if (bson_has_field(results[0], "_id"))
-    {
-        bson_iter_t iterator;
-        bson_iter_init(&iterator, results[0]);
-        bson_iter_find(&iterator, "_id");
-        const bson_value_t *value = bson_iter_value(&iterator);
-        bson_oid_copy(&value->value.v_oid, oid);
-    }
+    bson_oid_t *oid = get_oid(results[0]);
     str_hash_add(server_ctx.session_tokens, str_token, oid);
     LoginReply_t *r = LoginReply_new();
     LoginReply_set_session_token(r, session_token);
@@ -457,6 +471,16 @@ static void game_invite_2(request_ctx_t *ctx, bson_t **results) {
     }
     TODO pick up here later
     */
+    // Check the single results OID against the SID in our server_ctx.yadayada
+    char *sid = get_sid(results[0]);
+    int_vector_t *vector = str_hash_get(server_ctx.game_invite_subscriptions, sid);
+    if (vector == NULL) {
+        bson_iter_t iterator;
+        bson_iter_init(&iterator, results[0]);
+        bson_iter_find(&iterator, "pending game invites");
+        return;
+    }
+    
 }
 
 void game_invite_subscribe_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
@@ -655,23 +679,27 @@ void message_handler(loop_t *loop, int fd, connection_ctx_t *connection_ctx)  {
         }
         break;
         case TABLE_TYPE_GameAcceptSubscribe: {
-            DEBUG_PRINTF("GameAcceptSubscribe request not implemented");
-            not_implemented_handler(loop, fd, request_ctx);
+            DEBUG_PRINTF("GameAcceptSubscribe request");
+            request_ctx->message = GameAcceptSubscribe_deserialize(message, message_length);
+            game_accept_subscribe_handler(loop, fd, request_ctx);
         }
         break;
         case TABLE_TYPE_GameSubscribe: {
-            DEBUG_PRINTF("GameSubscribe request not implemented");
-            not_implemented_handler(loop, fd, request_ctx);
+            DEBUG_PRINTF("GameSubscribe request");
+            request_ctx->message = GameSubscribe_deserialize(message, message_length);
+            game_subscribe_handler(loop, fd, request_ctx);
         }
         break;
         case TABLE_TYPE_FriendRequestSubscribe: {
-            DEBUG_PRINTF("FriendRequestSubscribe request not implemented");
-            not_implemented_handler(loop, fd, request_ctx);
+            DEBUG_PRINTF("FriendRequestSubscribe request");
+            request_ctx->message = FriendRequestSubscribe_deserialize(message, message_length);
+            friend_request_subscribe_handler(loop, fd, request_ctx);
         }
         break;
         case TABLE_TYPE_FriendRequestAcceptedSubscribe: {
-            DEBUG_PRINTF("FriendRequestAcceptedSubscribe request not implemented");
-            not_implemented_handler(loop, fd, request_ctx);
+            DEBUG_PRINTF("FriendRequestAcceptedSubscribe request");
+            request_ctx->message = FriendRequestAcceptedSubscribe_deserialize(message, message_length);
+            friend_request_accepted_subscribe_handler(loop, fd, request_ctx);
         }
         break;
         default: {
@@ -879,8 +907,17 @@ static void database_insert(request_ctx_t *ctx, database_collection_e collection
 
 void *database_thread(loop_t *loop)
 {
+    // TODO handle losing connection to mongo
     mongoc_init();
-    mongoc_client_t *client = mongoc_client_new("mongodb://localhost:27017");
+    char *connection_string;
+    asprintf(
+        &connection_string,
+        "mongodb://%s:%s@chess-mongo:27017",
+        getenv("MONGO_USERNAME"),
+        getenv("MONGO_PASSWORD")
+    );
+    DEBUG_PRINTF("Connection string: %s", connection_string);
+    mongoc_client_t *client = mongoc_client_new(connection_string);
     mongoc_client_set_appname(client, APP_NAME);
     mongoc_database_t *database = mongoc_client_get_database(client, APP_NAME);
     mongoc_collection_t *user_collection = mongoc_client_get_collection(client, APP_NAME, "users");
@@ -979,8 +1016,11 @@ void *database_thread(loop_t *loop)
     return NULL;
 }
 
-int main(int argc, char **arg)
+int main(int argc, char **argv)
 {
+    // Don't buffer output streams
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
 
     // TODO let the user set PORT from a command line later, defaulting to 15873
     uint16_t PORT = 15873;
@@ -1037,6 +1077,7 @@ int main(int argc, char **arg)
     
     loop_add_fd(loop, server_fd, READ_EVENT, accept_connection_cb, NULL);
     loop_add_signal(loop, SIGINT, sigint_handler, NULL);
+    loop_add_signal(loop, SIGTERM, sigint_handler, NULL);
     loop_add_signal(loop, SIGUSR1, ignore_handler, NULL);
 
     // Spin up a thread to handle our database queries
@@ -1068,9 +1109,6 @@ int main(int argc, char **arg)
     })
     kh_destroy_str_map(server_ctx.session_tokens);
 
-    /*
-    TODO clean up the OID's in each of these maps
-    */
     const char *sid;
     int_vector_t *vector;
     kh_foreach(server_ctx.game_invite_subscriptions, sid, vector, {

@@ -1,0 +1,21 @@
+version: '3'
+services:
+  chess_server:
+    restart: always
+    container_name: chess_server
+    build: .
+    ports:
+      - 15873:15873
+    environment:
+      MONGO_USERNAME: ${MONGO_USERNAME}
+      MONGO_PASSWORD: ${MONGO_PASSWORD}
+
+  chess_mongo:
+      image: mongo
+      container_name: chess-mongo
+      restart: always
+      environment:
+          MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
+          MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      volumes:
+          - /var/chess/db:/data/db/

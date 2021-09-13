@@ -1,0 +1,24 @@
+# Build the app
+FROM python:3.9 as build
+
+WORKDIR /opt/cmake
+RUN wget https://github.com/Kitware/CMake/releases/download/v3.21.2/cmake-3.21.2-linux-x86_64.sh
+COPY install_cmake.sh .
+RUN ./install_cmake.sh
+WORKDIR /deps
+COPY install_build_packages.sh .
+RUN ./install_build_packages.sh
+RUN pip install sly prettyprinter
+
+
+COPY . /build
+WORKDIR /build
+RUN ./debug.sh
+
+# Run the app
+FROM ubuntu:21.04 as runtime
+COPY install_runtime_packages.sh .
+RUN ./install_runtime_packages.sh
+COPY --from=build /build/binaries /app
+WORKDIR /app
+CMD ["/app/chess_server"]

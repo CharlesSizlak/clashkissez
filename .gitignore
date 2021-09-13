@@ -5,3 +5,4 @@ pychess
 build/
 debug/
 binaries/
+.env

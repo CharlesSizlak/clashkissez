@@ -14,7 +14,8 @@ message = b'\x02\xc0\x03Jim\x06potato'
 print("Sending registration message")
 s.sendall(len(message).to_bytes(4, 'big'))
 s.sendall(message)
+print("Receiving:")
 reply = s.recv(4096)
-print("Registration Reply:", xxd(reply))
+print(xxd(reply))
 
 s.close()

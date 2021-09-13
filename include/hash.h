@@ -4,9 +4,9 @@
 #include <khash.h>
 #include <stdbool.h>
 
-KHASH_MAP_INIT_INT(map, void*);
-KHASH_MAP_INIT_INT(sz_map, void*);
-KHASH_MAP_INIT_STR(str_map, void*);
+KHASH_MAP_INIT_INT(map, void*)
+KHASH_MAP_INIT_INT(sz_map, void*)
+KHASH_MAP_INIT_STR(str_map, void*)
 
 void hash_add(kh_map_t *hashtable, int key, void *value);
 

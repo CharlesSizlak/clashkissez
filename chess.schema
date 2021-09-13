@@ -158,6 +158,10 @@ table FriendRequestAcceptedSubscribe {
     session_token:[uint8:16];
 }
 
+table PendingGamesRequest {
+    session_token:[uint8:16];
+}
+
 // Client <- Server
 
 table LoginReply {
@@ -289,4 +293,8 @@ table PastGameFullInformationReply {
     time_increment_black:uint32;
     move_history:[uint8];
     time_used:[uint32];
+}
+
+table PendingGamesReply {
+    games:[GameInviteNotification];
 }

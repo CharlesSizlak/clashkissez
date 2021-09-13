@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <khash.h>
 
-KHASH_MAP_INIT_INT64(tmap, size_t);
+KHASH_MAP_INIT_INT64(tmap, size_t)
 
 typedef struct time_element_t {
     size_t id;
