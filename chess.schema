@@ -21,7 +21,8 @@ enum Error:byte {
     ILLEGAL_MOVE_ERROR,
     INTERNAL_SERVER_ERROR,
     INVALID_SESSION_TOKEN,
-    USER_DOESNT_EXIST_ERROR
+    USER_DOESNT_EXIST_ERROR,
+    DATABASE_ERROR
 }
 
 // All measurements of time are in milliseconds
@@ -63,7 +64,7 @@ table GameInviteRequest {
 table GameAcceptRequest {
     session_token:[uint8:16];
     accepted_status:bool;
-    game_invite_id:uint32;
+    game_invite_id:string;
 }
 
 table FullGameInformationRequest {
@@ -162,6 +163,22 @@ table PendingGamesRequest {
     session_token:[uint8:16];
 }
 
+/*
+table DeactivateAccountRequest {
+    session_token:[uint8:16];
+}
+
+table ReactivateAccountRequest {
+    username:string;
+    // Some identifier  
+}
+
+table DeleteAccountRequest {
+    session_token:[uint8:16];
+}
+// TODO add replies
+*/
+
 // Client <- Server
 
 table LoginReply {
@@ -188,7 +205,7 @@ table GameInviteReply {
 }
 
 table GameInviteNotification {
-    game_invite_id:uint32;
+    game_invite_id:string;
     username:string;
     time_control_sender:uint32;
     time_increment_sender:uint32;

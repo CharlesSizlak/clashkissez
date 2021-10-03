@@ -1,7 +1,7 @@
 version: '3'
 services:
   chess_server:
-    restart: always
+    restart: "no"
     container_name: chess_server
     build: .
     ports:

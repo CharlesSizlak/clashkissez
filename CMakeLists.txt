@@ -11,12 +11,6 @@ find_library(SSL_LIB libssl.so REQUIRED)
 find_library(CRYPTO_LIB libcrypto.so REQUIRED)
 
 
-add_library(random STATIC
-    "${CMAKE_CURRENT_LIST_DIR}/src/random.c"
-)
-target_include_directories(random PUBLIC 
-    "${CMAKE_CURRENT_LIST_DIR}/include"
-)
 set(
     PROJECT_COMPILE_OPTIONS
     -Wall -Wextra -Wpedantic
@@ -24,39 +18,6 @@ set(
     -Wno-gnu-empty-struct
     -Wno-unused-parameter
 )
-target_compile_options(random PRIVATE ${PROJECT_COMPILE_OPTIONS})
-set_property(TARGET random PROPERTY C_STANDARD 23)
-
-
-add_library(vector STATIC
-    "${CMAKE_CURRENT_LIST_DIR}/src/vector.c"
-)
-target_include_directories(vector PUBLIC 
-    "${CMAKE_CURRENT_LIST_DIR}/include"
-)
-target_compile_options(vector PRIVATE ${PROJECT_COMPILE_OPTIONS})
-set_property(TARGET vector PROPERTY C_STANDARD 23)
-
-
-add_library(time_heap STATIC 
-    "${CMAKE_CURRENT_LIST_DIR}/src/time_heap.c"
-)
-target_include_directories(time_heap PUBLIC 
-    "${CMAKE_CURRENT_LIST_DIR}/include"
-    "${CMAKE_CURRENT_LIST_DIR}/deps/klib"
-)
-target_compile_options(time_heap PRIVATE ${PROJECT_COMPILE_OPTIONS})
-set_property(TARGET time_heap PROPERTY C_STANDARD 23)
-
-
-add_library(queue STATIC
-    "${CMAKE_CURRENT_LIST_DIR}/src/queue.c"
-)
-target_include_directories(queue PUBLIC 
-    "${CMAKE_CURRENT_LIST_DIR}/include"
-)
-target_compile_options(queue PRIVATE ${PROJECT_COMPILE_OPTIONS})
-set_property(TARGET queue PROPERTY C_STANDARD 23)
 
 
 add_library(serialib_chess STATIC
@@ -69,24 +30,32 @@ target_compile_options(serialib_chess PRIVATE ${PROJECT_COMPILE_OPTIONS})
 set_property(TARGET serialib_chess PROPERTY C_STANDARD 23)
 
 
-add_library(loop STATIC
+add_executable(chess_server
+    "${CMAKE_CURRENT_LIST_DIR}/src/vector.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/server.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/random.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/loop.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/hash.c"
-)
-target_include_directories(loop PUBLIC 
-    "${CMAKE_CURRENT_LIST_DIR}/include"
-    "${CMAKE_CURRENT_LIST_DIR}/deps/klib"
-)
-target_compile_options(loop PRIVATE ${PROJECT_COMPILE_OPTIONS})
-target_link_libraries(loop PUBLIC time_heap queue pthread)
-set_property(TARGET loop PROPERTY C_STANDARD 23)
+    "${CMAKE_CURRENT_LIST_DIR}/src/time_heap.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/queue.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/contexts.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/database.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/friend_request_accepted_subscribe_handler.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/friend_request_subscribe_handler.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/game_accept_subscribe_handler.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/game_invite_handler.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/game_invite_subscribe_handler.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/game_subscribe_handler.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/handlers.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/login_request_handler.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/register_request_handler.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/security.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/message_handler.c"
 
-
-add_executable(chess_server
-    "${CMAKE_CURRENT_LIST_DIR}/src/server.c"
-)
+    )
 target_include_directories(chess_server PUBLIC 
     "${CMAKE_CURRENT_LIST_DIR}/include"
+    "${CMAKE_CURRENT_LIST_DIR}/deps/klib"
 )
 target_compile_definitions(chess_server PRIVATE -D_GNU_SOURCE)
 target_compile_options(chess_server PRIVATE ${PROJECT_COMPILE_OPTIONS})
@@ -95,12 +64,7 @@ target_link_libraries(chess_server
     PUBLIC
     serialib_chess
     rt
-    loop
-    queue
-    time_heap
     pthread
-    random
-    vector
     ${SSL_LIB}
     ${CRYPTO_LIB}
     PRIVATE
@@ -108,13 +72,29 @@ target_link_libraries(chess_server
 )
 
 
-add_executable(loop_test "${CMAKE_CURRENT_LIST_DIR}/test/loop_test.c")
-target_link_libraries(loop_test loop)
+add_executable(loop_test
+    "${CMAKE_CURRENT_LIST_DIR}/test/loop_test.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/loop.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/time_heap.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/queue.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/hash.c"
+)
+target_link_libraries(loop_test pthread)
+target_include_directories(loop_test PUBLIC 
+    "${CMAKE_CURRENT_LIST_DIR}/include"
+    "${CMAKE_CURRENT_LIST_DIR}/deps/klib"
+)
 target_compile_options(loop_test PRIVATE ${PROJECT_COMPILE_OPTIONS})
 set_property(TARGET loop_test PROPERTY C_STANDARD 23)
 
 
-add_executable(time_heap_test "${CMAKE_CURRENT_LIST_DIR}/test/time_heap_test.c")
-target_link_libraries(time_heap_test time_heap)
+add_executable(time_heap_test
+    "${CMAKE_CURRENT_LIST_DIR}/test/time_heap_test.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/time_heap.c"
+)
+target_include_directories(time_heap_test PUBLIC 
+    "${CMAKE_CURRENT_LIST_DIR}/include"
+    "${CMAKE_CURRENT_LIST_DIR}/deps/klib"
+)
 target_compile_options(time_heap_test PRIVATE ${PROJECT_COMPILE_OPTIONS})
 set_property(TARGET time_heap_test PROPERTY C_STANDARD 23)
