@@ -18,6 +18,8 @@ bool int_vector_pop(int_vector_t *vector, int *value);
 
 bool int_vector_remove(int_vector_t *vector, int value);
 
+void int_vector_remove_index(int_vector_t *vector, size_t index);
+
 void int_vector_free(int_vector_t *vector);
 
 #endif

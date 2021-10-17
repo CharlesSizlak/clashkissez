@@ -19,13 +19,12 @@
 #include "contexts.h"
 #include "database.h"
 
-//TODO put each handler in its own file
-
 server_ctx_t server_ctx;
 
 static void sigint_handler(loop_t *loop, int signal, void *data) {
     loop->running = false;
 }
+
 
 static void ignore_handler(loop_t *loop, int signal, void *data) {
     // Do nothing

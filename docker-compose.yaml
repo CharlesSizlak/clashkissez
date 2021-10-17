@@ -3,7 +3,9 @@ services:
   chess_server:
     restart: "no"
     container_name: chess_server
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.${BUILD_TYPE}
     ports:
       - 15873:15873
     environment:
@@ -11,11 +13,13 @@ services:
       MONGO_PASSWORD: ${MONGO_PASSWORD}
 
   chess_mongo:
-      image: mongo
-      container_name: chess-mongo
-      restart: always
-      environment:
-          MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
-          MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
-      volumes:
-          - /var/chess/db:/data/db/
+    image: mongo
+    ports:
+      - 27017:27017
+    container_name: chess_mongo
+    restart: always
+    environment:
+        MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
+        MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    volumes:
+        - /var/chess/db:/data/db/

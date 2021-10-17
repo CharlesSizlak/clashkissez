@@ -90,6 +90,7 @@ void *database_thread(loop_t *loop)
     );
     DEBUG_PRINTF("Connection string: %s", connection_string);
     mongoc_client_t *client = mongoc_client_new(connection_string);
+    free(connection_string);
     mongoc_client_set_appname(client, APP_NAME);
     mongoc_database_t *database = mongoc_client_get_database(client, APP_NAME);
     mongoc_collection_t *user_collection = mongoc_client_get_collection(client, APP_NAME, "users");
@@ -98,6 +99,7 @@ void *database_thread(loop_t *loop)
     mongoc_cursor_t *cursor = NULL;
     mongoc_collection_t *collection = NULL;
     const bson_t *document = NULL;
+    bson_t stack_result;
     bson_t *result = NULL;
     bson_error_t error;
     bool status;
@@ -109,9 +111,6 @@ void *database_thread(loop_t *loop)
         {
             break;
         }
-        size_t result_count = 0;
-        size_t result_capacity = 32;
-        bson_t **results = malloc((result_capacity + 1) * sizeof(bson_t *));
         // Get the appropriate collection
         switch (data->collection)
         {
@@ -129,9 +128,11 @@ void *database_thread(loop_t *loop)
         // Perform the operation
         switch (data->operation)
         {
-        case QUERY:
+        case QUERY: {
+            size_t result_count = 0;
+            size_t result_capacity = 32;
+            bson_t **results = malloc((result_capacity + 1) * sizeof(bson_t *));
             cursor = mongoc_collection_find_with_opts(collection, data->query, NULL, NULL);
-            document = (bson_t *)7;
             while (mongoc_cursor_next (cursor, &document)) {
                 result = bson_copy(document);
                 if (result_count + 1 > result_capacity) {
@@ -153,6 +154,7 @@ void *database_thread(loop_t *loop)
             loop_trigger_fd(loop, data->ctx->connection_ctx->fd, (fd_callback_f)database_result_handler, data);
             bson_destroy(data->query);
             mongoc_cursor_destroy(cursor);
+        }
         break;
         case UPDATE:
             result = bson_new();
@@ -177,21 +179,21 @@ void *database_thread(loop_t *loop)
             bson_destroy(data->update);
         break;
         case INSERT:
-            result = bson_new();
             status = mongoc_collection_insert_one(
                 collection, 
                 data->insert, 
                 NULL, 
-                result, 
+                &stack_result, 
                 &error
             );
             if (!status) {
                 DEBUG_PRINTF("Failed to insert document: %s\n", error.message);
-                bson_destroy(result);
                 data->result = NULL;
+                bson_destroy(&stack_result);
             }
             else {
-                data->result = result;
+                data->result = bson_copy(&stack_result);
+                bson_destroy(&stack_result);
             }
             loop_trigger_fd(loop, data->ctx->connection_ctx->fd, (fd_callback_f)database_result_handler, data);
             bson_destroy(data->insert);
@@ -223,6 +225,7 @@ void *database_thread(loop_t *loop)
         }
     }
     mongoc_collection_destroy(user_collection);
+    mongoc_collection_destroy(game_collection);
     mongoc_database_destroy(database);
     mongoc_client_destroy(client);
     mongoc_cleanup();

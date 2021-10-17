@@ -45,6 +45,14 @@ bool int_vector_remove(int_vector_t *vector, int value) {
     return false;
 }
 
+void int_vector_remove_index(int_vector_t *vector, size_t index) {
+    if (index >= vector->count) {
+        return;
+    }
+    vector->count -= 1;
+    memmove(vector->values + index, vector->values + index + 1, vector->count - index);
+}
+
 void int_vector_free(int_vector_t *vector) {
     free(vector->values);
     free(vector);

@@ -7,9 +7,9 @@
 #include "hash.h"
 #include "security.h"
 
-static void game_invite_2(request_ctx_t *ctx, bson_t **results);
-static void game_invite_3(request_ctx_t *ctx, bson_t **results);
-static void game_invite_4(request_ctx_t *ctx, bson_t **results);
+static void game_invite_get_user_document(request_ctx_t *ctx, bson_t **results);
+static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson_t **results);
+static void game_invite_reply(request_ctx_t *ctx, bson_t *result);
 
 void game_invite_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
     uint8_t *token;
@@ -21,6 +21,7 @@ void game_invite_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
     }
     char *str_token = session_token_to_str(token);
     bson_oid_t *oid = str_hash_get(server_ctx.session_tokens, str_token);
+    free(str_token);
     if (oid == NULL) {
         queue_error(ctx, INVALID_SESSION_TOKEN);
         GameInviteRequest_free(ctx->message);
@@ -29,10 +30,10 @@ void game_invite_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
     }
     bson_t *query = bson_new();
     BSON_APPEND_OID(query, "_id", oid);
-    database_query(ctx, USERS, query, (database_callback_f)game_invite_2);
+    database_query(ctx, USERS, query, (database_callback_f)game_invite_get_user_document);
 }
 
-static void game_invite_2(request_ctx_t *ctx, bson_t **results) {
+static void game_invite_get_user_document(request_ctx_t *ctx, bson_t **results) {
     // Get our username from the document
     if (results == NULL) {
         queue_error(ctx, DATABASE_ERROR);
@@ -48,15 +49,16 @@ static void game_invite_2(request_ctx_t *ctx, bson_t **results) {
         return;
     }
     ctx->user_document = results[0];
+    free(results);
     // Get the other player's document
     char *username;
     GameInviteRequest_get_username(ctx->message, &username);
     bson_t *query = bson_new();
     BSON_APPEND_UTF8(query, "username", username);
-    database_query(ctx, USERS, query, (database_callback_f)game_invite_3);
+    database_query(ctx, USERS, query, (database_callback_f)game_invite_get_invitee_document_and_notify);
 }
 
-static void game_invite_3(request_ctx_t *ctx, bson_t **results) {
+static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson_t **results) {
     if (results == NULL) {
         queue_error(ctx, DATABASE_ERROR);
         GameInviteRequest_free(ctx->message);
@@ -70,27 +72,8 @@ static void game_invite_3(request_ctx_t *ctx, bson_t **results) {
         free(ctx);
         return;
     }
-    /*
-    example of pulling out a field for later
-    if (bson_has_field(results[0], ""))
-    {
-        bson_iter_t iterator;
-        bson_iter_init(&iterator, results[0]);
-        bson_iter_find(&iterator, "");
-        const bson_value_t *value = bson_iter_value(&iterator);
-        memcpy(salt, value->value.v_binary.data, SALT_SIZE);
-    }
-    */
-    // Check the single results OID against the SID in our server_ctx.yadayada
-    /*
-    bson_t *insert = bson_new();
-    bson_t *array = bson_new();
-    BSON_APPEND_UTF8(insert, "username", username);
-    BSON_APPEND_UTF8(insert, "password", password);
-    BSON_APPEND_ARRAY(insert, "games", array);
-    bson_oid_init(&ctx->oid, NULL);
-    BSON_APPEND_OID(insert, "_id", &ctx->oid);
-    */
+    bson_t *invitee = results[0];
+    free(results);
     bson_t *insert = bson_new();
     bson_iter_t iterator;
     bson_iter_init(&iterator, ctx->user_document);
@@ -109,25 +92,32 @@ static void game_invite_3(request_ctx_t *ctx, bson_t **results) {
     GameInviteRequest_get_time_control_receiver(ctx->message, &time_control_receiver);
     GameInviteRequest_get_time_increment_receiver(ctx->message, &time_increment_receiver);
     GameInviteRequest_get_color(ctx->message, &color);
-    
+    char *inviting_sid = get_sid(ctx->user_document);
+    bson_destroy(ctx->user_document);
+    char *invited_sid = get_sid(invitee);
+    bson_destroy(invitee);
     BSON_APPEND_BOOL(insert, "pending", true);
     bson_oid_init(&ctx->oid, NULL);
     BSON_APPEND_OID(insert, "_id", &ctx->oid);
     BSON_APPEND_UTF8(insert, "inviting player", inviting_player);
+    BSON_APPEND_UTF8(insert, "inviting player sid", inviting_sid);
     BSON_APPEND_UTF8(insert, "invited player", invited_player);
+    BSON_APPEND_UTF8(insert, "invited player sid", invited_sid);
     BSON_APPEND_INT64(insert, "time_control_sender", time_control_sender);
     BSON_APPEND_INT64(insert, "time_increment_sender", time_increment_sender);
     BSON_APPEND_INT64(insert, "time_control_receiver", time_control_receiver);
     BSON_APPEND_INT64(insert, "time_increment_receiver", time_increment_receiver);
     BSON_APPEND_INT32(insert, "color", color);
 
-    database_insert(ctx, GAMES, insert, (database_callback_f)game_invite_4);
+    database_insert(ctx, GAMES, insert, (database_callback_f)game_invite_reply);
 
-    char *sid = get_sid(results[0]);
-    int_vector_t *vector = str_hash_get(server_ctx.game_invite_subscriptions, sid);
+    int_vector_t *vector = str_hash_get(server_ctx.game_invite_subscriptions, invited_sid);
     if (vector == NULL) {
         vector = int_vector_new(1);
-        str_hash_add(server_ctx.game_invite_subscriptions, sid, vector);
+        str_hash_add(server_ctx.game_invite_subscriptions, invited_sid, vector);
+    }
+    else {
+        free(invited_sid);
     }
     char *notif_sid = get_sid(insert);
     GameInviteNotification_t *notif = GameInviteNotification_new();
@@ -148,15 +138,33 @@ static void game_invite_3(request_ctx_t *ctx, bson_t **results) {
         // queue up a notification to send for it
         connection_ctx_t *notify_ctx = hash_get(server_ctx.connection_contexts, vector->values[i]);
         if (notify_ctx == NULL) {
-            // TODO continue here
+            int_vector_remove_index(vector, i);
+            i -= 1;
+            continue;
         }
         else {
             connection_ctx_queue_write(notify_ctx, buffer, buffer_size);
         }
     }
+    free(buffer);
+    free(notif_sid);
+    free(inviting_sid);
 }
 
-static void game_invite_4(request_ctx_t *ctx, bson_t **results) {
-    (void)ctx;
-    (void)results;
+static void game_invite_reply(request_ctx_t *ctx, bson_t *result) {
+    if (result == NULL) {
+        queue_error(ctx, DATABASE_ERROR);
+    }
+    else {
+        bson_destroy(result);
+        GameInviteReply_t *reply = GameInviteReply_new();
+        size_t buffer_size;
+        uint8_t *buffer;
+        GameInviteReply_serialize(reply, &buffer, &buffer_size);
+        GameInviteReply_free(reply);
+        queue_write(ctx, buffer, buffer_size);
+        free(buffer);
+    }
+    GameInviteRequest_free(ctx->message);
+    free(ctx);
 }

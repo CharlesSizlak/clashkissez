@@ -9,7 +9,7 @@ def xxd(b: bytes) -> str:
 s = socket.socket()
 s.connect(('127.0.0.1', 15873))
 
-message = b'\x02\xc0\x03Jim\x06potato'
+message = b'\x02\xc0\x03Bob\x08passw0rd'
 
 print("Sending registration message")
 s.sendall(len(message).to_bytes(4, 'big'))
