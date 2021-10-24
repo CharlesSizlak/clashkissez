@@ -84,7 +84,7 @@ void *database_thread(loop_t *loop)
     char *connection_string;
     asprintf(
         &connection_string,
-        "mongodb://%s:%s@chess-mongo:27017",
+        "mongodb://%s:%s@chess_mongo:27017",
         getenv("MONGO_USERNAME"),
         getenv("MONGO_PASSWORD")
     );

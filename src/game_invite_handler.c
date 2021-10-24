@@ -6,28 +6,15 @@
 #include "vector.h"
 #include "hash.h"
 #include "security.h"
+#include "handler_utilities.h"
 
 static void game_invite_get_user_document(request_ctx_t *ctx, bson_t **results);
 static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson_t **results);
 static void game_invite_reply(request_ctx_t *ctx, bson_t *result);
 
 void game_invite_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
-    uint8_t *token;
-    if (!GameInviteRequest_get_session_token(ctx->message, &token)) {
-        queue_error(ctx, INVALID_PACKET_ERROR);
-        GameInviteRequest_free(ctx->message);
-        free(ctx);
-        return;
-    }
-    char *str_token = session_token_to_str(token);
-    bson_oid_t *oid = str_hash_get(server_ctx.session_tokens, str_token);
-    free(str_token);
-    if (oid == NULL) {
-        queue_error(ctx, INVALID_SESSION_TOKEN);
-        GameInviteRequest_free(ctx->message);
-        free(ctx);
-        return;
-    }
+    bson_oid_t *oid;
+    VALIDATE_SESSION_TOKEN(GameInviteRequest, oid);
     bson_t *query = bson_new();
     BSON_APPEND_OID(query, "_id", oid);
     database_query(ctx, USERS, query, (database_callback_f)game_invite_get_user_document);
@@ -35,19 +22,7 @@ void game_invite_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
 
 static void game_invite_get_user_document(request_ctx_t *ctx, bson_t **results) {
     // Get our username from the document
-    if (results == NULL) {
-        queue_error(ctx, DATABASE_ERROR);
-        GameInviteRequest_free(ctx->message);
-        free(ctx);
-        return;
-    }
-    if (results[0] == NULL) {
-        queue_error(ctx, USER_DOESNT_EXIST_ERROR);
-        GameInviteRequest_free(ctx->message);
-        results_free(results);
-        free(ctx);
-        return;
-    }
+    VALIDATE_QUERY_RESULTS(GameInviteRequest, USER_DOESNT_EXIST_ERROR);
     ctx->user_document = results[0];
     free(results);
     // Get the other player's document
@@ -59,19 +34,7 @@ static void game_invite_get_user_document(request_ctx_t *ctx, bson_t **results) 
 }
 
 static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson_t **results) {
-    if (results == NULL) {
-        queue_error(ctx, DATABASE_ERROR);
-        GameInviteRequest_free(ctx->message);
-        free(ctx);
-        return;
-    }
-    if (results[0] == NULL) {
-        queue_error(ctx, USER_DOESNT_EXIST_ERROR);
-        GameInviteRequest_free(ctx->message);
-        results_free(results);
-        free(ctx);
-        return;
-    }
+    VALIDATE_QUERY_RESULTS(GameInviteRequest, USER_DOESNT_EXIST_ERROR);
     bson_t *invitee = results[0];
     free(results);
     bson_t *insert = bson_new();

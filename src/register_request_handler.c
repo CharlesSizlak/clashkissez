@@ -8,7 +8,7 @@
 #include "database.h"
 #include "handlers.h"
 #include "random.h"
-
+#include "handler_utilities.h"
 
 static void register_request_continue(request_ctx_t *ctx, bson_t **results);
 static void register_request_finish(request_ctx_t *ctx, bson_t *result);
@@ -32,19 +32,7 @@ void register_request_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
 static void register_request_continue(request_ctx_t *ctx, bson_t **results) {
     // Check if there are any results. If there are results, pack up and send a register failed
     // error, then iterate over results and free the documents there.
-    if (results == NULL) {
-        queue_error(ctx, DATABASE_ERROR);
-        RegisterRequest_free(ctx->message);
-        free(ctx);
-        return;
-    }
-    if (results[0] != NULL) {
-        queue_error(ctx, REGISTER_FAILED_ERROR);
-        RegisterRequest_free(ctx->message);
-        results_free(results);
-        free(ctx);
-        return;
-    }
+    VALIDATE_QUERY_NO_RESULTS(RegisterRequest, REGISTER_FAILED_ERROR);
     char *username;
     char *password;
     RegisterRequest_get_username(ctx->message, &username);

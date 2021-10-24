@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import socket
+from generated.chess import *
 
 def xxd(b: bytes) -> str:
     s = b.hex()
@@ -15,5 +16,11 @@ s.sendall(len(message).to_bytes(4, 'big'))
 s.sendall(message)
 reply = s.recv(4096)
 print("Login Reply:", xxd(reply))
+deserialized = deserialize(reply)
+
+print(deserialized)
+
+if isinstance(deserialized, ErrorReply):
+    print(deserialized.error)
 
 s.close()

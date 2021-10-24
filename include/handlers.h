@@ -17,6 +17,7 @@ void game_accept_subscribe_handler(loop_t *loop, int fd, request_ctx_t *ctx);
 void game_subscribe_handler(loop_t *loop, int fd, request_ctx_t *ctx);
 void friend_request_subscribe_handler(loop_t *loop, int fd, request_ctx_t *ctx);
 void friend_request_accepted_subscribe_handler(loop_t *loop, int fd, request_ctx_t *ctx);
+void resolve_game_invite_handler(loop_t *loop, int fd, request_ctx_t *ctx);
 
 void not_implemented_handler(loop_t *loop, int fd, request_ctx_t *ctx);
 void invalid_packet_handler(loop_t *loop, int fd, request_ctx_t *ctx);

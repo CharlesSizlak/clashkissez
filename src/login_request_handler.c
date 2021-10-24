@@ -9,6 +9,7 @@
 #include "hash.h"
 #include "handlers.h"
 #include "debug.h"
+#include "handler_utilities.h"
 
 static void login_request_finish(request_ctx_t *ctx, bson_t **results);
 
@@ -27,20 +28,7 @@ void login_request_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
 }
 
 static void login_request_finish(request_ctx_t *ctx, bson_t **results) {
-    if (results == NULL) {
-        queue_error(ctx, DATABASE_ERROR);
-        LoginRequest_free(ctx->message);
-        free(ctx);
-        return;
-    }
-    if (results[0] == NULL) {
-        DEBUG_PRINTF("Username not found");
-        queue_error(ctx, LOGIN_FAILED_ERROR);
-        LoginRequest_free(ctx->message);
-        results_free(results);
-        free(ctx);
-        return;
-    }
+    VALIDATE_QUERY_RESULTS(LoginRequest, LOGIN_FAILED_ERROR);
     uint8_t salt[SALT_SIZE];
     if (bson_has_field(results[0], "salt"))
     {

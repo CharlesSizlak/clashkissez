@@ -51,6 +51,7 @@ add_executable(chess_server
     "${CMAKE_CURRENT_LIST_DIR}/src/register_request_handler.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/security.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/message_handler.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/resolve_game_invite_handler.c"
 
     )
 target_include_directories(chess_server PUBLIC 

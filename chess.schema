@@ -61,7 +61,7 @@ table GameInviteRequest {
 }
 
 
-table GameAcceptRequest {
+table ResolveGameInviteRequest {
     session_token:[uint8:16];
     accepted_status:bool;
     game_invite_id:string;

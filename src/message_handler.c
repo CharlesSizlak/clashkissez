@@ -38,14 +38,15 @@ void message_handler(loop_t *loop, int fd, connection_ctx_t *connection_ctx)  {
         }
         break;
         case TABLE_TYPE_GameInviteRequest: {
-            DEBUG_PRINTF("GameInvite request");
+            DEBUG_PRINTF("Received GameInvite request");
             request_ctx->message = GameInviteRequest_deserialize(message, message_length);
             game_invite_handler(loop, fd, request_ctx);
         }
         break;
-        case TABLE_TYPE_GameAcceptRequest: {
-            DEBUG_PRINTF("GameAccept request not implemented");
-            not_implemented_handler(loop, fd, request_ctx);
+        case TABLE_TYPE_ResolveGameInviteRequest: {
+            DEBUG_PRINTF("Received GameAccept request");
+            request_ctx->message = ResolveGameInviteRequest_deserialize(message, message_length);
+            resolve_game_invite_handler(loop, fd, request_ctx);
         }
         break;
         case TABLE_TYPE_FullGameInformationRequest: {
