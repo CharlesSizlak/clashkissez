@@ -16,6 +16,7 @@ typedef struct connection_ctx_t {
     uint32_t bytes_to_write;
     int fd;
     bool close_connection;
+    bson_oid_t *oid;
 } connection_ctx_t;
 
 typedef struct request_ctx_t {
@@ -34,6 +35,7 @@ typedef struct server_ctx_t {
     kh_str_map_t *game_subscriptions;
     kh_str_map_t *friend_request_subscriptions;
     kh_str_map_t *friend_request_accepted_subscriptions;
+    kh_str_map_t *active_games;
 } server_ctx_t;
 
 extern server_ctx_t server_ctx;

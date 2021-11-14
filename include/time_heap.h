@@ -31,6 +31,8 @@ bool heap_peek(time_heap_t *heap);
 
 void heap_update(time_heap_t *heap, size_t id, struct timespec *element);
 
+void heap_get(time_heap_t *heap, size_t id, struct timespec *output);
+
 void heap_free(time_heap_t *heap);
 
 void heap_extract(time_heap_t *heap);

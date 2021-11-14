@@ -223,6 +223,11 @@ void heap_update(time_heap_t *heap, size_t id, struct timespec *element)
     }
 }
 
+void heap_get(time_heap_t *heap, size_t id, struct timespec *output) {
+    size_t index = thash_get(heap->hashtable, id);
+    memcpy(output, &heap->elements[index].timer, sizeof(struct timespec));
+}
+
 void heap_extract(time_heap_t *heap)
 {
     heap_remove_index(heap, 0);

@@ -26,6 +26,7 @@ enum Error:byte {
 }
 
 // All measurements of time are in milliseconds
+// Note: Restart server every 136 years
 
 // Client -> Server
 

@@ -51,6 +51,7 @@ void accept_connection_cb(loop_t *loop, event_e event, int fd, void *data)
     connection_ctx->fd = conn_fd;
     connection_ctx->close_connection = false;
     connection_ctx->loop = loop;
+    connection_ctx->oid = NULL;
     hash_add(server_ctx.connection_contexts, conn_fd, connection_ctx);
     loop_add_fd(loop, conn_fd, READ_EVENT, (fd_callback_f)read_handler, connection_ctx);
     // In the instance we accept a connection, check their message against
@@ -118,6 +119,7 @@ int main(int argc, char **argv)
     server_ctx.game_subscriptions = kh_init_str_map();
     server_ctx.friend_request_subscriptions = kh_init_str_map();
     server_ctx.friend_request_accepted_subscriptions = kh_init_str_map();
+    server_ctx.active_games = kh_init_str_map();
 
     loop_init(loop);
     
@@ -137,6 +139,7 @@ int main(int argc, char **argv)
     pthread_join(database_thread_id, NULL);
     loop_fini(loop);
 
+    // TODO free leftovers in server_ctx.active_games
     int fd;
     connection_ctx_t *connection_ctx;
     kh_foreach(server_ctx.connection_contexts, fd, connection_ctx, {

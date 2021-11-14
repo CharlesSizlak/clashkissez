@@ -14,6 +14,7 @@ typedef struct loop_t {
     kh_map_t *fd_map;
     kh_map_t *sig_map;
     kh_sz_map_t *timer_map;
+    kh_sz_map_t *paused_timer_map;
     bool running;
     sigset_t sigset;
     time_heap_t *heap;
@@ -33,6 +34,11 @@ typedef struct cb_data_t {
     void *cb;
     void *data;
 } cb_data_t;
+
+typedef struct paused_timer_t {
+    struct timespec pause_time;
+    struct timespec expiration_time;
+} paused_timer_t;
 
 // Takes the event loop, an event_e which contains
 // the type of event that occured along the fd, the fd, and data
@@ -83,6 +89,10 @@ size_t loop_add_timer(
 void loop_remove_timer(loop_t *loop, size_t id);
 
 void loop_update_timer(loop_t *loop, size_t id, struct timespec *timer);
+
+void loop_pause_timer(loop_t *loop, size_t id);
+
+void loop_unpause_timer(loop_t *loop, size_t id);
 
 int loop_run(loop_t *loop);
 

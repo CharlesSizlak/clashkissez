@@ -62,6 +62,23 @@ static int timer_subtract(struct timespec *a, struct timespec *b)
     return milliseconds;
 }
 
+/**
+ * Adds milliseconds into the given timespec
+ */
+static void timer_add(struct timespec *a, int milliseconds)
+{
+    // Convert the milliseconds instead seconds and nanoseconds, add them to the respective tv_
+    time_t seconds = milliseconds / 1000;
+    milliseconds -= seconds * 1000;
+    time_t nanoseconds = milliseconds * 1000000;
+    a->tv_sec += seconds;
+    a->tv_nsec += nanoseconds;
+    if (a->tv_nsec >= 1000000000) {
+        a->tv_nsec -= 1000000000;
+        a->tv_sec += 1;
+    }
+}
+
 void signal_caught(int signum) 
 {
     signals_received[signum] = true;
@@ -73,6 +90,7 @@ void loop_init(loop_t *loop)
     loop->fd_map = kh_init_map();
     loop->sig_map = kh_init_map();
     loop->timer_map = kh_init_sz_map();
+    loop->paused_timer_map = kh_init_sz_map();
     sigemptyset(&loop->sigset);
     loop->heap = heap_create();
     loop->pending_fd_callbacks = queue_new();
@@ -178,6 +196,31 @@ void loop_remove_timer(loop_t *loop, size_t id)
 void loop_update_timer(loop_t *loop, size_t id, struct timespec *timer) 
 {
     heap_update(loop->heap, id, timer);
+}
+
+void loop_pause_timer(loop_t *loop, size_t id) {
+    static struct timespec infinite_timer = {
+        .tv_nsec = 0xFFFFFFFF,
+        .tv_sec = 0xFFFFFFFF
+    };
+    paused_timer_t *timer = malloc(sizeof(paused_timer_t));
+    heap_get(loop->heap, id, &timer->expiration_time);
+    clock_gettime(CLOCK_MONOTONIC, &timer->pause_time);
+    sz_hash_add(loop->paused_timer_map, id, timer);
+    heap_update(loop->heap, id, &infinite_timer);
+}
+
+void loop_unpause_timer(loop_t *loop, size_t id) {
+    paused_timer_t *timer = sz_hash_remove(loop->paused_timer_map, id);
+    // Figure out the difference between pause_time and current time
+    struct timespec current_time;
+    clock_gettime(CLOCK_MONOTONIC, &current_time);
+    int milliseconds_diff = timer_subtract(&current_time, &timer->pause_time);
+    // Add that difference to expiration time
+    timer_add(&timer->expiration_time, milliseconds_diff);
+    // Update the heap with the new expiration time
+    heap_update(loop->heap, id, &timer->expiration_time);
+    free(timer);
 }
 
 int loop_run(loop_t *loop) 

@@ -11,6 +11,11 @@
 #define VALIDATE_SESSION_TOKEN(RequestType, Oid)                                                                  \
     do                                                                                                            \
     {                                                                                                             \
+        if (ctx->connection_ctx->oid != NULL) \
+        { \
+            Oid = ctx->connection_ctx->oid; \
+            break; \
+        } \
         uint8_t *_validate_session_token;                                                                         \
         if (!RequestType##_get_session_token(ctx->message, &_validate_session_token))                             \
         {                                                                                                         \
@@ -30,6 +35,7 @@
             return;                                                                                               \
         }                                                                                                         \
         Oid = _validate_session_oid;                                                                              \
+        ctx->connection_ctx->oid = _validate_session_oid; \
     }                                                                                                             \
     while(0)
 

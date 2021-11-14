@@ -6,7 +6,11 @@
 #include "vector.h"
 #include "hash.h"
 #include "security.h"
+#include "models.h"
 #include "handler_utilities.h"
+
+#define MS_IN_A_DAY (1000*60*60*24)
+#define MS_IN_AN_HOUR (1000*60*60)
 
 static void game_invite_get_user_document(request_ctx_t *ctx, bson_t **results);
 static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson_t **results);
@@ -27,10 +31,40 @@ static void game_invite_get_user_document(request_ctx_t *ctx, bson_t **results) 
     free(results);
     // Get the other player's document
     char *username;
-    GameInviteRequest_get_username(ctx->message, &username);
+    if (!GameInviteRequest_get_username(ctx->message, &username)) 
+    {
+        queue_error(ctx, INVALID_PACKET_ERROR);
+        GameInviteRequest_free(ctx->message);
+        free(ctx);
+        return;
+    }
     bson_t *query = bson_new();
     BSON_APPEND_UTF8(query, "username", username);
     database_query(ctx, USERS, query, (database_callback_f)game_invite_get_invitee_document_and_notify);
+}
+
+static void store_game_in_memory(
+    request_ctx_t *ctx,
+    const char *sid,
+    const char *inviting_player,
+    const char *invited_player, 
+    uint32_t time_control_sender,
+    uint32_t time_increment_sender,
+    uint32_t time_control_receiver,
+    uint32_t time_increment_receiver,
+    Color_e color)
+{
+    game_t *game = malloc(sizeof(game_t));
+    game->game_id = sid;
+    game->invited_player = invited_player;
+    game->inviting_player = inviting_player;
+    game->inviting_player_color = color;
+    game->pending = true;
+    game->time_control_receiver = time_control_receiver;
+    game->time_control_sender = time_control_sender;
+    game->time_increment_receiver = time_increment_receiver;
+    game->time_increment_sender = time_increment_sender;
+    str_hash_add(server_ctx.active_games, sid, game);
 }
 
 static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson_t **results) {
@@ -56,23 +90,44 @@ static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson
     GameInviteRequest_get_time_increment_receiver(ctx->message, &time_increment_receiver);
     GameInviteRequest_get_color(ctx->message, &color);
     char *inviting_sid = get_sid(ctx->user_document);
-    bson_destroy(ctx->user_document);
     char *invited_sid = get_sid(invitee);
     bson_destroy(invitee);
-    BSON_APPEND_BOOL(insert, "pending", true);
+
     bson_oid_init(&ctx->oid, NULL);
     BSON_APPEND_OID(insert, "_id", &ctx->oid);
-    BSON_APPEND_UTF8(insert, "inviting player", inviting_player);
-    BSON_APPEND_UTF8(insert, "inviting player sid", inviting_sid);
-    BSON_APPEND_UTF8(insert, "invited player", invited_player);
-    BSON_APPEND_UTF8(insert, "invited player sid", invited_sid);
-    BSON_APPEND_INT64(insert, "time_control_sender", time_control_sender);
-    BSON_APPEND_INT64(insert, "time_increment_sender", time_increment_sender);
-    BSON_APPEND_INT64(insert, "time_control_receiver", time_control_receiver);
-    BSON_APPEND_INT64(insert, "time_increment_receiver", time_increment_receiver);
-    BSON_APPEND_INT32(insert, "color", color);
+    char *notif_sid = get_sid(insert);
 
-    database_insert(ctx, GAMES, insert, (database_callback_f)game_invite_reply);
+    // Check if either of the time_controls are > 1 day, or if the time_increments are > 1 hour
+    if (time_control_sender >= MS_IN_A_DAY ||
+        time_control_receiver >= MS_IN_A_DAY ||
+        time_increment_sender >= MS_IN_AN_HOUR ||
+        time_increment_receiver >= MS_IN_AN_HOUR) 
+    {
+        BSON_APPEND_BOOL(insert, "pending", true);
+        BSON_APPEND_UTF8(insert, "inviting player", inviting_player);
+        BSON_APPEND_UTF8(insert, "inviting player sid", inviting_sid);
+        BSON_APPEND_UTF8(insert, "invited player", invited_player);
+        BSON_APPEND_UTF8(insert, "invited player sid", invited_sid);
+        BSON_APPEND_INT64(insert, "time_control_sender", time_control_sender);
+        BSON_APPEND_INT64(insert, "time_increment_sender", time_increment_sender);
+        BSON_APPEND_INT64(insert, "time_control_receiver", time_control_receiver);
+        BSON_APPEND_INT64(insert, "time_increment_receiver", time_increment_receiver);
+        BSON_APPEND_INT32(insert, "color", color);
+        database_insert(ctx, GAMES, insert, (database_callback_f)game_invite_reply);
+    }
+    else {
+        store_game_in_memory(
+            ctx, 
+            notif_sid, 
+            inviting_player, 
+            invited_player, 
+            time_control_sender,
+            time_increment_sender,
+            time_control_receiver,
+            time_increment_receiver,
+            color
+        );
+    }
 
     int_vector_t *vector = str_hash_get(server_ctx.game_invite_subscriptions, invited_sid);
     if (vector == NULL) {
@@ -82,7 +137,7 @@ static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson
     else {
         free(invited_sid);
     }
-    char *notif_sid = get_sid(insert);
+    
     GameInviteNotification_t *notif = GameInviteNotification_new();
     GameInviteNotification_set_game_invite_id(notif, notif_sid);
     GameInviteNotification_set_username(notif, inviting_player);
@@ -112,6 +167,7 @@ static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson
     free(buffer);
     free(notif_sid);
     free(inviting_sid);
+    bson_destroy(ctx->user_document);
 }
 
 static void game_invite_reply(request_ctx_t *ctx, bson_t *result) {
