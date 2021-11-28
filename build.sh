@@ -11,7 +11,7 @@ MODE='Release'
 # Build the server
 mkdir -p $BUILD_DIR
 cd $BUILD_DIR
-cmake -DCMAKE_BUILD_TYPE=$MODE ..
+cmake -DCMAKE_BUILD_TYPE=$MODE .. -G"Unix Makefiles"
 make
 cd ..
 

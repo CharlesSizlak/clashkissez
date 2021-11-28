@@ -46,7 +46,7 @@ timeval_subtract (result, x, y)
 /**
  * Returns the difference in milliseconds of a - b
  */
-static int timer_subtract(struct timespec *a, struct timespec *b)
+int timer_subtract(struct timespec *a, struct timespec *b)
 {
     // If there aren't enough nanoseconds, borrow from the
     // seconds field.
@@ -65,7 +65,7 @@ static int timer_subtract(struct timespec *a, struct timespec *b)
 /**
  * Adds milliseconds into the given timespec
  */
-static void timer_add(struct timespec *a, int milliseconds)
+void timer_add(struct timespec *a, int milliseconds)
 {
     // Convert the milliseconds instead seconds and nanoseconds, add them to the respective tv_
     time_t seconds = milliseconds / 1000;
@@ -296,8 +296,12 @@ int loop_run(loop_t *loop)
         {
             sleep = -1;
         }
-
-        epoll_return = epoll_wait(loop->epoll_fd, &event, 1, sleep);
+        if (loop->running) {
+            epoll_return = epoll_wait(loop->epoll_fd, &event, 1, sleep);
+        }
+        else {
+            epoll_return = 0;
+        }
 
         // Call the callback for any signals that arrived
         for (int i = 0; i < _NSIG; i++)
@@ -367,9 +371,13 @@ void loop_fini(loop_t *loop)
     kh_foreach(loop->timer_map, id, value, {
         free(value);
     })
+    kh_foreach(loop->paused_timer_map, id, value, {
+        free(value);
+    })
     kh_destroy_map(loop->fd_map);
     kh_destroy_map(loop->sig_map);
     kh_destroy_sz_map(loop->timer_map);
+    kh_destroy_sz_map(loop->paused_timer_map);
     heap_free(loop->heap);
     queue_free(loop->pending_fd_callbacks);
     close(loop->epoll_fd);

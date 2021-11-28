@@ -99,3 +99,19 @@ target_include_directories(time_heap_test PUBLIC
 )
 target_compile_options(time_heap_test PRIVATE ${PROJECT_COMPILE_OPTIONS})
 set_property(TARGET time_heap_test PROPERTY C_STANDARD 23)
+
+add_executable(timer_test
+    "${CMAKE_CURRENT_LIST_DIR}/test/timer_test.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/time_heap.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/queue.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/hash.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/loop.c"
+)
+target_include_directories(timer_test PUBLIC 
+    "${CMAKE_CURRENT_LIST_DIR}/include"
+    "${CMAKE_CURRENT_LIST_DIR}/deps/klib"
+)
+target_link_libraries(timer_test PUBLIC pthread)
+
+target_compile_options(timer_test PRIVATE ${PROJECT_COMPILE_OPTIONS})
+set_property(TARGET timer_test PROPERTY C_STANDARD 23)
