@@ -47,7 +47,9 @@ static void store_game_in_memory(
     request_ctx_t *ctx,
     const char *sid,
     const char *inviting_player,
-    const char *invited_player, 
+    const char *invited_player,
+    const char *inviting_player_sid,
+    const char *invited_player_sid,
     uint32_t time_control_sender,
     uint32_t time_increment_sender,
     uint32_t time_control_receiver,
@@ -56,14 +58,22 @@ static void store_game_in_memory(
 {
     game_t *game = malloc(sizeof(game_t));
     game->game_id = sid;
-    game->invited_player = invited_player;
-    game->inviting_player = inviting_player;
+    game->invited_player = strdup(invited_player);
+    game->inviting_player = strdup(inviting_player);
+    game->inviting_sid = strdup(inviting_player_sid);
+    game->invited_sid = strdup(invited_player_sid);
     game->inviting_player_color = color;
     game->pending = true;
     game->time_control_receiver = time_control_receiver;
     game->time_control_sender = time_control_sender;
     game->time_increment_receiver = time_increment_receiver;
     game->time_increment_sender = time_increment_sender;
+    memcpy(game->board_state, server_ctx.memory_board_state_template, BOARD_SIZE);
+    game->moves_made = 0;
+    game->white_short_castle_rights = true;
+    game->white_long_castle_rights = true;
+    game->black_short_castle_rights = true;
+    game->black_long_castle_rights = true;
     str_hash_add(server_ctx.active_games, sid, game);
 }
 
@@ -108,11 +118,21 @@ static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson
         BSON_APPEND_UTF8(insert, "inviting player sid", inviting_sid);
         BSON_APPEND_UTF8(insert, "invited player", invited_player);
         BSON_APPEND_UTF8(insert, "invited player sid", invited_sid);
-        BSON_APPEND_INT64(insert, "time_control_sender", time_control_sender);
-        BSON_APPEND_INT64(insert, "time_increment_sender", time_increment_sender);
-        BSON_APPEND_INT64(insert, "time_control_receiver", time_control_receiver);
-        BSON_APPEND_INT64(insert, "time_increment_receiver", time_increment_receiver);
+        BSON_APPEND_INT64(insert, "time control sender", time_control_sender);
+        BSON_APPEND_INT64(insert, "time increment sender", time_increment_sender);
+        BSON_APPEND_INT64(insert, "time control receiver", time_control_receiver);
+        BSON_APPEND_INT64(insert, "time increment receiver", time_increment_receiver);
         BSON_APPEND_INT32(insert, "color", color);
+        BSON_APPEND_ARRAY(insert, "board state", server_ctx.board_state_template);
+        bson_t *move_history = bson_new();
+        BSON_APPEND_ARRAY(insert, "move history", move_history);
+        bson_free(move_history);
+        BSON_APPEND_INT32(insert, "moves made", 0);
+        BSON_APPEND_BOOL(insert, "white short castle rights", true);
+        BSON_APPEND_BOOL(insert, "white long castle rights", true);
+        BSON_APPEND_BOOL(insert, "black short castle rights", true);
+        BSON_APPEND_BOOL(insert, "black long castle rights", true);
+
         database_insert(ctx, GAMES, insert, (database_callback_f)game_invite_reply);
     }
     else {
@@ -120,7 +140,9 @@ static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson
             ctx, 
             notif_sid, 
             inviting_player, 
-            invited_player, 
+            invited_player,
+            inviting_sid,
+            invited_sid, 
             time_control_sender,
             time_increment_sender,
             time_control_receiver,

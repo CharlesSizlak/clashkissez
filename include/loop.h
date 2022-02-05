@@ -94,6 +94,8 @@ void loop_pause_timer(loop_t *loop, size_t id);
 
 void loop_unpause_timer(loop_t *loop, size_t id);
 
+int loop_get_time_remaining(loop_t *loop, size_t id);
+
 int timer_subtract(struct timespec *a, struct timespec *b);
 
 void timer_add(struct timespec *a, int milliseconds);

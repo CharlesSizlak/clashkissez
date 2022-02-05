@@ -40,6 +40,6 @@ int main()
     heap_print(heap);
     heap_extract(heap);
     heap_print(heap);
-    printf("Heap Peek Result: %i\n", heap_peek(heap));
+    printf("Heap Peek Result: %i\n", heap_peek_head(heap));
     heap_free(heap);
 }

@@ -43,41 +43,6 @@ timeval_subtract (result, x, y)
 }
 */
 
-/**
- * Returns the difference in milliseconds of a - b
- */
-int timer_subtract(struct timespec *a, struct timespec *b)
-{
-    // If there aren't enough nanoseconds, borrow from the
-    // seconds field.
-    if (a->tv_nsec < b->tv_nsec)
-    {
-        a->tv_sec--;
-        a->tv_nsec += 1000000000;
-    }
-
-    int seconds = a->tv_sec - b->tv_sec;
-    int nanoseconds = a->tv_nsec - b->tv_nsec;
-    int milliseconds = seconds * 1000 + nanoseconds / 1000000;
-    return milliseconds;
-}
-
-/**
- * Adds milliseconds into the given timespec
- */
-void timer_add(struct timespec *a, int milliseconds)
-{
-    // Convert the milliseconds instead seconds and nanoseconds, add them to the respective tv_
-    time_t seconds = milliseconds / 1000;
-    milliseconds -= seconds * 1000;
-    time_t nanoseconds = milliseconds * 1000000;
-    a->tv_sec += seconds;
-    a->tv_nsec += nanoseconds;
-    if (a->tv_nsec >= 1000000000) {
-        a->tv_nsec -= 1000000000;
-        a->tv_sec += 1;
-    }
-}
 
 void signal_caught(int signum) 
 {
@@ -223,6 +188,50 @@ void loop_unpause_timer(loop_t *loop, size_t id) {
     free(timer);
 }
 
+int loop_get_time_remaining(loop_t *loop, size_t id) {
+    struct timespec current_time;
+    clock_gettime(CLOCK_MONOTONIC, &current_time);
+    struct timespec timer;
+    heap_get(loop->heap, id, &timer);
+    return timer_subtract(&timer, &current_time);
+}
+
+/**
+ * Returns the difference in milliseconds of a - b
+ */
+int timer_subtract(struct timespec *a, struct timespec *b)
+{
+    // If there aren't enough nanoseconds, borrow from the
+    // seconds field.
+    if (a->tv_nsec < b->tv_nsec)
+    {
+        a->tv_sec--;
+        a->tv_nsec += 1000000000;
+    }
+
+    int seconds = a->tv_sec - b->tv_sec;
+    int nanoseconds = a->tv_nsec - b->tv_nsec;
+    int milliseconds = seconds * 1000 + nanoseconds / 1000000;
+    return milliseconds;
+}
+
+/**
+ * Adds milliseconds into the given timespec
+ */
+void timer_add(struct timespec *a, int milliseconds)
+{
+    // Convert the milliseconds instead seconds and nanoseconds, add them to the respective tv_
+    time_t seconds = milliseconds / 1000;
+    milliseconds -= seconds * 1000;
+    time_t nanoseconds = milliseconds * 1000000;
+    a->tv_sec += seconds;
+    a->tv_nsec += nanoseconds;
+    if (a->tv_nsec >= 1000000000) {
+        a->tv_nsec -= 1000000000;
+        a->tv_sec += 1;
+    }
+}
+
 int loop_run(loop_t *loop) 
 {
     DEBUG_PRINTF("Entering loop!");
@@ -272,7 +281,7 @@ int loop_run(loop_t *loop)
         {
             struct timespec current_time;
             clock_gettime(CLOCK_MONOTONIC, &current_time);
-            if (heap_peek(loop->heap))
+            if (heap_peek_head(loop->heap))
             {
                 // Pop off the top timer, call its cb
                 // Then check the next timer and go until we're able to sleep
@@ -280,7 +289,7 @@ int loop_run(loop_t *loop)
                 cb_data_t *timer_cb_data = sz_hash_get(loop->timer_map, id);
                 timer_callback_f timer_cb = (timer_callback_f)timer_cb_data->cb;
                 timer_cb(loop, id, timer_cb_data->data);
-                if (heap_peek(loop->heap))
+                if (heap_peek_by_id(loop->heap, id))
                 {
                     heap_remove(loop->heap, id);
                 }

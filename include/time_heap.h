@@ -27,7 +27,9 @@ size_t heap_add (time_heap_t *heap, struct timespec *element);
 
 void heap_remove(time_heap_t *heap, size_t id);
 
-bool heap_peek(time_heap_t *heap);
+bool heap_peek_head(time_heap_t *heap);
+
+bool heap_peek_by_id(time_heap_t *heap, size_t id);
 
 void heap_update(time_heap_t *heap, size_t id, struct timespec *element);
 

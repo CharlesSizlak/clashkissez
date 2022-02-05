@@ -2,6 +2,7 @@
 #include "chess.h"
 #include "handlers.h"
 #include "debug.h"
+#include "vector.h"
 
 void queue_write(request_ctx_t *ctx, uint8_t *buffer, size_t buffer_size) {
     connection_ctx_queue_write(ctx->connection_ctx, buffer, buffer_size);
@@ -33,4 +34,18 @@ void connection_ctx_queue_error(connection_ctx_t *ctx, Error_e error) {
     ErrorReply_free(e);
     connection_ctx_queue_write(ctx, buffer, buffer_size);
     free(buffer);
+}
+
+void vector_queue_write(int_vector_t *vector, uint8_t *buffer, size_t buffer_size) {
+    for (size_t i = 0; i < vector->count; i++) {
+        connection_ctx_t *notify_ctx = hash_get(server_ctx.connection_contexts, vector->values[i]);
+        if (notify_ctx == NULL) {
+            int_vector_remove_index(vector, i);
+            i -= 1;
+            continue;
+        }
+        else {
+            connection_ctx_queue_write(notify_ctx, buffer, buffer_size);
+        }
+    }
 }

@@ -19,7 +19,7 @@ bool add_subscription(request_ctx_t *ctx, kh_str_map_t *hashtable, uint8_t *toke
     bson_oid_t *oid = str_hash_get(server_ctx.session_tokens, str_token);
     if (oid == NULL) {
         queue_error(ctx, INVALID_SESSION_TOKEN);
-       return false;
+        return false;
     }
     char *sid = malloc(SID_SIZE);
     bson_oid_to_string(oid, sid);

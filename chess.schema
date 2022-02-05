@@ -61,7 +61,6 @@ table GameInviteRequest {
     color:Color;
 }
 
-
 table ResolveGameInviteRequest {
     session_token:[uint8:16];
     accepted_status:bool;
@@ -141,7 +140,7 @@ table GameInviteSubscribe {
 }
 
 // Let me know if anyone accepts a game invite I sent them
-table GameAcceptSubscribe {
+table GameInviteResponseSubscribe {
     session_token:[uint8:16];
 }
 
@@ -179,6 +178,8 @@ table DeleteAccountRequest {
 }
 // TODO add replies
 */
+
+// TODO add a way to check on whether or not a game was declined
 
 // Client <- Server
 
@@ -218,6 +219,12 @@ table GameInviteNotification {
 table GameAcceptNotification {
     game_id:string;
 }
+
+table GameDeclineNotification {
+    game_id:string;
+}
+
+
 
 table FullGameInformationReply {
     username:string;

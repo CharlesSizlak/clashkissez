@@ -18,6 +18,7 @@
 #include "handlers.h"
 #include "contexts.h"
 #include "database.h"
+#include "models.h"
 
 server_ctx_t server_ctx;
 
@@ -115,11 +116,51 @@ int main(int argc, char **argv)
     server_ctx.session_tokens = kh_init_str_map();
     server_ctx.database_queue = queue_new();
     server_ctx.game_invite_subscriptions = kh_init_str_map();
-    server_ctx.game_accept_subscriptions = kh_init_str_map();
+    server_ctx.game_invite_response_subscriptions = kh_init_str_map();
     server_ctx.game_subscriptions = kh_init_str_map();
     server_ctx.friend_request_subscriptions = kh_init_str_map();
     server_ctx.friend_request_accepted_subscriptions = kh_init_str_map();
     server_ctx.active_games = kh_init_str_map();
+    server_ctx.board_state_template = bson_new();
+    for (size_t i = 0; i < BOARD_SIZE; i++)
+    {
+        char str_i[3];
+        sprintf(str_i, "%zu", i);
+        size_t row = ROW(i);
+        size_t column = COLUMN(i);
+        uint8_t piece = PIECE_NONE;
+        if (row < 2 || row >= 6) {
+            if (row == 1) {
+                piece = PIECE_WHITE_PAWN;
+            }
+            else if (row == 6) {
+                piece = PIECE_BLACK_PAWN;
+            }
+            else {
+                if (column == 0 || column == 7) {
+                    piece = PIECE_WHITE_ROOK;
+                }
+                else if (column == 1 || column == 6) {
+                    piece = PIECE_WHITE_KNIGHT;
+                }
+                else if (column == 2 || column == 5) {
+                    piece = PIECE_WHITE_BISHOP;
+                }
+                else if (column == 3) {
+                    piece = PIECE_WHITE_QUEEN;
+                }
+                else if (column == 4) {
+                    piece = PIECE_WHITE_KING;
+                }
+                if (row == 7) {
+                    piece += 0x10;
+                }
+            }
+        }
+        BSON_APPEND_UTF8(server_ctx.board_state_template, str_i, piece);
+        server_ctx.memory_board_state_template[i] = piece;
+    }
+    
 
     loop_init(loop);
     
@@ -165,11 +206,11 @@ int main(int argc, char **argv)
         int_vector_free(vector);
     })
     kh_destroy_str_map(server_ctx.game_invite_subscriptions);
-    kh_foreach(server_ctx.game_accept_subscriptions, sid, vector, {
+    kh_foreach(server_ctx.game_invite_response_subscriptions, sid, vector, {
         free((char *)sid);
         int_vector_free(vector);
     })
-    kh_destroy_str_map(server_ctx.game_accept_subscriptions);
+    kh_destroy_str_map(server_ctx.game_invite_response_subscriptions);
     kh_foreach(server_ctx.game_subscriptions, sid, vector, {
         free((char *)sid);
         int_vector_free(vector);

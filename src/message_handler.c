@@ -120,10 +120,10 @@ void message_handler(loop_t *loop, int fd, connection_ctx_t *connection_ctx)  {
             game_invite_subscribe_handler(loop, fd, request_ctx);
         }
         break;
-        case TABLE_TYPE_GameAcceptSubscribe: {
-            DEBUG_PRINTF("GameAcceptSubscribe request");
-            request_ctx->message = GameAcceptSubscribe_deserialize(message, message_length);
-            game_accept_subscribe_handler(loop, fd, request_ctx);
+        case TABLE_TYPE_GameInviteResponseSubscribe: {
+            DEBUG_PRINTF("GameInviteResponseSubscribe request");
+            request_ctx->message = GameInviteResponseSubscribe_deserialize(message, message_length);
+            game_invite_response_subscribe_handler(loop, fd, request_ctx);
         }
         break;
         case TABLE_TYPE_GameSubscribe: {

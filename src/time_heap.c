@@ -155,12 +155,21 @@ void heap_remove(time_heap_t *heap, size_t id)
     // :)
 }
 
-bool heap_peek(time_heap_t *heap)
+bool heap_peek_head(time_heap_t *heap)
 {
     // Check to see if the timer on top of the heap has expired
     struct timespec current_time;
     clock_gettime(CLOCK_MONOTONIC, &current_time);
     return timespec_gt(&current_time, &heap->elements[0].timer);
+}
+
+bool heap_peek_by_id(time_heap_t *heap, size_t id)
+{
+    struct timespec current_time;
+    clock_gettime(CLOCK_MONOTONIC, &current_time);
+    struct timespec timer;
+    heap_get(heap, id, &timer);
+    return timespec_gt(&current_time, &timer);
 }
 
 void heap_update(time_heap_t *heap, size_t id, struct timespec *element)
