@@ -96,7 +96,7 @@ void resolve_game_invite_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
             // TODO don't repeat all this code, make this bitch efficient with the other code path
         }
         else {
-
+            // TODO worry about this later when we're adding in database games
         }
     }
 }

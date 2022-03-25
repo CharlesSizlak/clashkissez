@@ -57,7 +57,7 @@ static void store_game_in_memory(
     Color_e color)
 {
     game_t *game = malloc(sizeof(game_t));
-    game->game_id = sid;
+    game->game_id = strdup(sid);
     game->invited_player = strdup(invited_player);
     game->inviting_player = strdup(inviting_player);
     game->inviting_sid = strdup(inviting_player_sid);

@@ -52,7 +52,9 @@ typedef struct game_t {
 } game_t;
 
 typedef struct game_timers_t {
-    
+    // TODO figure out what this is lmao (prolly outdated)
 } game_timers_t;
+
+void game_free(game_t *game);
 
 #endif
