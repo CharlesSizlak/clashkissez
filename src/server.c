@@ -157,7 +157,7 @@ int main(int argc, char **argv)
                 }
             }
         }
-        BSON_APPEND_UTF8(server_ctx.board_state_template, str_i, piece);
+        BSON_APPEND_INT32(server_ctx.board_state_template, str_i, piece);
         server_ctx.memory_board_state_template[i] = piece;
     }
     
