@@ -6,9 +6,5 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - run: echo "The ${{ github.repository }} repository has been cloned to the runner."
       - name: Build the code
-        run: |
-          cd ${{ github.workspace }};
-          docker-compose build;
-      - run: echo "This job's status is ${{ job.status }}."
+        run: docker-compose build
