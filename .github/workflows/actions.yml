@@ -15,3 +15,5 @@ jobs:
       - run: echo "MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}" >> .env
       - name: Build the code
         run: docker-compose build
+      - name: Run tests
+        run: ./test/test.sh

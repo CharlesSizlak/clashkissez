@@ -17,5 +17,8 @@ s.sendall(message)
 print("Receiving:")
 reply = s.recv(4096)
 print(xxd(reply))
+assert reply[0] == 26
+assert reply[1] == 0x80
+assert len(reply) == 18
 
 s.close()
