@@ -1,5 +1,7 @@
 name: Clashkissez CI
-on: [push]
+on: 
+  - push 
+  - workflow_dispatch
 jobs:
   docker-build:
     runs-on: ubuntu-latest
