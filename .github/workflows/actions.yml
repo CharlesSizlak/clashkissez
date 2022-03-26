@@ -8,6 +8,7 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
+      - run: git submodule update --init --recursive
       - run: echo "BUILD_TYPE=${{ secrets.BUILD_TYPE }}" > .env
       - run: echo "MONGO_USERNAME=${{ secrets.MONGO_USERNAME }}" >> .env
       - run: echo "MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}" >> .env
