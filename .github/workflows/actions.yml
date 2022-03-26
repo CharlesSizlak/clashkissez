@@ -8,5 +8,8 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
+      - run: echo "BUILD_TYPE=${{ secrets.BUILD_TYPE }}" > .env
+      - run: echo "MONGO_USERNAME=${{ secrets.MONGO_USERNAME }}" >> .env
+      - run: echo "MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}" >> .env
       - name: Build the code
         run: docker-compose build
