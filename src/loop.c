@@ -111,10 +111,6 @@ void loop_remove_fd(loop_t *loop, int fd)
     epoll_ctl(loop->epoll_fd, EPOLL_CTL_DEL, fd, NULL);
 }
 
-/*
- * Called from a thread other than the loop's thread. Interrupts the
- * call to poll and queues an fd callback.
- */
 void loop_trigger_fd(loop_t *loop, int fd, fd_callback_f cb, void *data)
 {
     poll_item_t *poll_item = malloc(sizeof(poll_item_t));

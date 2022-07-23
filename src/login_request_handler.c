@@ -27,6 +27,15 @@ void login_request_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
     database_query(ctx, USERS, query, (database_callback_f)login_request_finish);
 }
 
+
+/* TODO Create another hashtable that will map string versions of user oids
+to a vector of active session tokens for that user. When a new session token is 
+requested we add it to the vector and if the vector gets to an arbitrary size
+then old session tokens get cleared out and removed as new ones come in. 
+In addition, store a time stamp with each session token in the vector
+for when that token expires and each time we validate a session token,
+we check the time stamp to see if it's expired.
+*/
 static void login_request_finish(request_ctx_t *ctx, bson_t **results) {
     VALIDATE_QUERY_RESULTS(LoginRequest, LOGIN_FAILED_ERROR);
     uint8_t salt[SALT_SIZE];

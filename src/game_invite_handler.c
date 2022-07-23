@@ -210,6 +210,7 @@ static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson
     }
 }
 
+// TODO Start a first move timer.
 static void game_invite_reply(request_ctx_t *ctx, bson_t *result) {
     if (result == NULL) {
         queue_error(ctx, DATABASE_ERROR);
