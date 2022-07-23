@@ -29,12 +29,14 @@ typedef void (*database_callback_f)(request_ctx_t *, void *);
  * @brief Take the results from a database query and free any documents returned to us
  */
 void results_free(bson_t **results);
+
 /**
  * @brief Take the oid from a given document. Return should be freed.
  * 
  * @return A bson_oid_t that contains the specific identifier for the document
  */
 bson_oid_t *get_oid(bson_t *obj);
+
 /**
  * @brief Take the string representation of a document's oid. Return should be freed.
  * 
@@ -43,12 +45,18 @@ bson_oid_t *get_oid(bson_t *obj);
 char *get_sid(bson_t *obj);
 
 /**
- * @brief A handy little boi that helps you queue up a database query :)
- * 
- * 
+ * @brief Queues a query for the database and passes the results to the provided callback.
  */
 void database_query(request_ctx_t *ctx, database_collection_e collection, bson_t *query, database_callback_f cb);
+
+/**
+ * @brief Queues an insert operation for the database.
+ */
 void database_insert(request_ctx_t *ctx, database_collection_e collection, bson_t *insert, database_callback_f cb);
+
+/**
+ * @brief This is meant to be used in a thread that will handle database operations.
+ */
 void *database_thread(loop_t *loop);
 
 #endif
