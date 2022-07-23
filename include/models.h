@@ -51,10 +51,9 @@ typedef struct game_t {
     bool black_long_castle_rights;
 } game_t;
 
-typedef struct game_timers_t {
-    // TODO figure out what this is lmao (prolly outdated)
-} game_timers_t;
-
+/**
+ * @brief Frees resources allocated for a game
+ */
 void game_free(game_t *game);
 
 #endif

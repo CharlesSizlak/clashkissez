@@ -56,8 +56,14 @@ typedef struct poll_item_t {
     void *data;
 } poll_item_t;
 
+/**
+ * @brief Initializes a given loop
+ */
 void loop_init(loop_t *loop);
 
+/**
+ * @brief Registers a file descriptor to be used as part of the event loop
+ */
 void loop_add_fd(
     loop_t *loop,
     int fd,
@@ -66,19 +72,36 @@ void loop_add_fd(
     void *data
 );
 
+/**
+ * @brief Called from a thread other than the loop's thread. Interrupts the
+ * call to poll and queues an fd callback.
+ */
 void loop_trigger_fd(loop_t *loop, int fd, fd_callback_f cb, void *data);
 
+/**
+ * @brief Removes a fd from the event loop
+ */
 void loop_remove_fd(loop_t *loop, int fd);
 
+/**
+ * @brief Adds a callback to be triggered when the given signal comes in to the loop
+ */
 void loop_add_signal(loop_t *loop, 
     int signum, 
     signal_callback_f cb, 
     void *data
 );
 
+/**
+ * @brief Removes a signal watch from the event loop.
+ */
 void loop_remove_signal(loop_t *loop, int signum);
 
-
+/**
+ * @brief Adds a timer to the loop that triggers the callback when the time is up
+ * @param timer Uses CLOCK_MONOTONIC timestamps
+ * @return An id that can be used to later reference this timer
+ */
 size_t loop_add_timer(
     loop_t *loop, 
     struct timespec *timer, 
@@ -86,22 +109,31 @@ size_t loop_add_timer(
     void *data
 );
 
+// All these are pretty self explanatory
 void loop_remove_timer(loop_t *loop, size_t id);
-
 void loop_update_timer(loop_t *loop, size_t id, struct timespec *timer);
-
 void loop_pause_timer(loop_t *loop, size_t id);
-
 void loop_unpause_timer(loop_t *loop, size_t id);
-
 int loop_get_time_remaining(loop_t *loop, size_t id);
 
+/**
+ * @brief Returns the difference in milliseconds of a - b
+ */
 int timer_subtract(struct timespec *a, struct timespec *b);
 
+/**
+ * @brief Adds milliseconds to a given struct timespec
+ */
 void timer_add(struct timespec *a, int milliseconds);
 
+/**
+ * @brief Begins the event loop which will run until an event in the loop stops it
+ */
 int loop_run(loop_t *loop);
 
+/**
+ * @brief Cleans up resources allocated for the event loop
+ */
 void loop_fini(loop_t *loop);
 
 #endif

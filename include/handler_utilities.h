@@ -8,14 +8,18 @@
 #include "security.h"
 #include <stdlib.h>
 
+/**
+ * @brief Takes a incoming packet that contains a session token and validates it.
+ * Takes a bson_oid_t as an output parameter that will contain the specific user's document. 
+ */
 #define VALIDATE_SESSION_TOKEN(RequestType, Oid)                                                                  \
     do                                                                                                            \
     {                                                                                                             \
-        if (ctx->connection_ctx->oid != NULL) \
-        { \
-            Oid = ctx->connection_ctx->oid; \
-            break; \
-        } \
+        if (ctx->connection_ctx->oid != NULL)                                                                     \
+        {                                                                                                         \
+            Oid = ctx->connection_ctx->oid;                                                                       \
+            break;                                                                                                \
+        }                                                                                                         \
         uint8_t *_validate_session_token;                                                                         \
         if (!RequestType##_get_session_token(ctx->message, &_validate_session_token))                             \
         {                                                                                                         \
@@ -35,46 +39,52 @@
             return;                                                                                               \
         }                                                                                                         \
         Oid = _validate_session_oid;                                                                              \
-        ctx->connection_ctx->oid = _validate_session_oid; \
+        ctx->connection_ctx->oid = _validate_session_oid;                                                         \
     }                                                                                                             \
     while(0)
 
+/**
+ * @brief Checks if there are results from a database query and queues an error there are
+ */
 #define VALIDATE_QUERY_NO_RESULTS(RequestType, ErrorType) \
-    do \
-    { \
-        if (results == NULL) { \
-            queue_error(ctx, DATABASE_ERROR); \
-            RequestType##_free(ctx->message); \
-            free(ctx); \
-            return; \
-        } \
-        if (results[0] != NULL) { \
-            queue_error(ctx, ErrorType); \
-            RequestType##_free(ctx->message); \
-            results_free(results); \
-            free(ctx); \
-            return; \
-        } \
-    } \
+    do                                                    \
+    {                                                     \
+        if (results == NULL) {                            \
+            queue_error(ctx, DATABASE_ERROR);             \
+            RequestType##_free(ctx->message);             \
+            free(ctx);                                    \
+            return;                                       \
+        }                                                 \
+        if (results[0] != NULL) {                         \
+            queue_error(ctx, ErrorType);                  \
+            RequestType##_free(ctx->message);             \
+            results_free(results);                        \
+            free(ctx);                                    \
+            return;                                       \
+        }                                                 \
+    }                                                     \
     while(0)
 
+/**
+ * @brief Checks if there are no results from a database query and queues an error if there aren't any
+ */
 #define VALIDATE_QUERY_RESULTS(RequestType, ErrorType) \
-    do \
-    { \
-        if (results == NULL) { \
-            queue_error(ctx, DATABASE_ERROR); \
-            RequestType##_free(ctx->message); \
-            free(ctx); \
-            return; \
-        } \
-        if (results[0] == NULL) { \
-            queue_error(ctx, ErrorType); \
-            RequestType##_free(ctx->message); \
-            results_free(results); \
-            free(ctx); \
-            return; \
-        } \
-    } \
+    do                                                 \
+    {                                                  \
+        if (results == NULL) {                         \
+            queue_error(ctx, DATABASE_ERROR);          \
+            RequestType##_free(ctx->message);          \
+            free(ctx);                                 \
+            return;                                    \
+        }                                              \
+        if (results[0] == NULL) {                      \
+            queue_error(ctx, ErrorType);               \
+            RequestType##_free(ctx->message);          \
+            results_free(results);                     \
+            free(ctx);                                 \
+            return;                                    \
+        }                                              \
+    }                                                  \
     while(0)
 
 #endif
