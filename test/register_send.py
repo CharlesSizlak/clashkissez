@@ -21,4 +21,14 @@ assert reply[0] == 26
 assert reply[1] == 0x80
 assert len(reply) == 18
 
+message = b'\x02\xc0\x03Bob\x06tomato'
+s.sendall(len(message).to_bytes(4, 'big'))
+s.sendall(message)
+print("Receiving:")
+reply = s.recv(4096)
+print(xxd(reply))
+assert reply[0] == 26
+assert reply[1] == 0x80
+assert len(reply) == 18
+
 s.close()

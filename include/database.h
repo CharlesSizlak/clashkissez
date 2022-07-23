@@ -5,6 +5,9 @@
 #include "contexts.h"
 #include "loop.h"
 
+/**
+ * @brief Tracks the type of database operation to be performed.
+ */
 typedef enum database_operation_e {
     QUERY,
     UPDATE,
@@ -12,6 +15,9 @@ typedef enum database_operation_e {
     DELETE
 } database_operation_e;
 
+/**
+ * @brief All data stored in the database will be under a member of database_collection_e.
+ */
 typedef enum database_collection_e {
     USERS,
     GAMES
@@ -19,10 +25,28 @@ typedef enum database_collection_e {
 
 typedef void (*database_callback_f)(request_ctx_t *, void *);
 
+/**
+ * @brief Take the results from a database query and free any documents returned to us
+ */
 void results_free(bson_t **results);
+/**
+ * @brief Take the oid from a given document. Return should be freed.
+ * 
+ * @return A bson_oid_t that contains the specific identifier for the document
+ */
 bson_oid_t *get_oid(bson_t *obj);
+/**
+ * @brief Take the string representation of a document's oid. Return should be freed.
+ * 
+ * @return A string containing the OID of a given document.
+ */
 char *get_sid(bson_t *obj);
 
+/**
+ * @brief A handy little boi that helps you queue up a database query :)
+ * 
+ * 
+ */
 void database_query(request_ctx_t *ctx, database_collection_e collection, bson_t *query, database_callback_f cb);
 void database_insert(request_ctx_t *ctx, database_collection_e collection, bson_t *insert, database_callback_f cb);
 void *database_thread(loop_t *loop);

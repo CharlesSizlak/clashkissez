@@ -18,9 +18,11 @@ reply = s.recv(4096)
 print("Login Reply:", xxd(reply))
 deserialized = deserialize(reply)
 
-print(deserialized)
-
 if isinstance(deserialized, ErrorReply):
     print(deserialized.error)
 
 s.close()
+
+assert reply[0] == 25
+assert reply[1] == 0x80
+assert len(reply) == 18

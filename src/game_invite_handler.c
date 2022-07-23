@@ -8,6 +8,7 @@
 #include "security.h"
 #include "models.h"
 #include "handler_utilities.h"
+#include "debug.h"
 
 #define MS_IN_A_DAY (1000*60*60*24)
 #define MS_IN_AN_HOUR (1000*60*60)
@@ -21,6 +22,7 @@ void game_invite_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
     VALIDATE_SESSION_TOKEN(GameInviteRequest, oid);
     bson_t *query = bson_new();
     BSON_APPEND_OID(query, "_id", oid);
+    DEBUG_PRINTF("All right, we got to the first step. Querying database.");
     database_query(ctx, USERS, query, (database_callback_f)game_invite_get_user_document);
 }
 
@@ -40,6 +42,7 @@ static void game_invite_get_user_document(request_ctx_t *ctx, bson_t **results) 
     }
     bson_t *query = bson_new();
     BSON_APPEND_UTF8(query, "username", username);
+    DEBUG_PRINTF("All right, second step. Querying database again");
     database_query(ctx, USERS, query, (database_callback_f)game_invite_get_invitee_document_and_notify);
 }
 
@@ -108,6 +111,7 @@ static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson
     char *notif_sid = get_sid(insert);
 
     // Check if either of the time_controls are > 1 day, or if the time_increments are > 1 hour
+    bool stored_game_in_memory = false;
     if (time_control_sender >= MS_IN_A_DAY ||
         time_control_receiver >= MS_IN_A_DAY ||
         time_increment_sender >= MS_IN_AN_HOUR ||
@@ -136,6 +140,7 @@ static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson
         database_insert(ctx, GAMES, insert, (database_callback_f)game_invite_reply);
     }
     else {
+        DEBUG_PRINTF("We should be storing the game in memory now");
         store_game_in_memory(
             ctx, 
             notif_sid, 
@@ -149,6 +154,14 @@ static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson
             time_increment_receiver,
             color
         );
+        GameInviteReply_t *reply = GameInviteReply_new();
+        size_t buffer_size;
+        uint8_t *buffer;
+        GameInviteReply_serialize(reply, &buffer, &buffer_size);
+        GameInviteReply_free(reply);
+        queue_write(ctx, buffer, buffer_size);
+        free(buffer);
+        stored_game_in_memory = true;
     }
 
     int_vector_t *vector = str_hash_get(server_ctx.game_invite_subscriptions, invited_sid);
@@ -172,6 +185,7 @@ static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson
     size_t buffer_size;
     GameInviteNotification_serialize(notif, &buffer, &buffer_size);
     GameInviteNotification_free(notif);
+    DEBUG_PRINTF("Sending out notifs");
     // Iterate over vector, send notfication to each subscribed fd
     for (size_t i = 0; i < vector->count; i++) {
         // Take out the fd's connection context if it exists
@@ -190,6 +204,10 @@ static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson
     free(notif_sid);
     free(inviting_sid);
     bson_destroy(ctx->user_document);
+    if (stored_game_in_memory) {
+        GameInviteRequest_free(ctx->message);
+        free(ctx);
+    }
 }
 
 static void game_invite_reply(request_ctx_t *ctx, bson_t *result) {

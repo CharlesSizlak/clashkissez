@@ -1,5 +1,6 @@
 #include <mongoc/mongoc.h>
 #include <stdlib.h>
+#include <time.h>
 #include "contexts.h"
 #include "database.h"
 #include "loop.h"
@@ -64,6 +65,7 @@ void resolve_game_invite_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
             Add the players time controls to that to make our two timers
             Slap the two timers in using our handy dandy loop functions
             win game */
+
         }
         else {
             /* TODO This is for games entered into the database.
