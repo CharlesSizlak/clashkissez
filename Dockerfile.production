@@ -20,5 +20,6 @@ FROM ubuntu:20.04 as runtime
 COPY install_runtime_packages.sh .
 RUN ./install_runtime_packages.sh
 COPY --from=build /build/binaries /app
+COPY --from=build /build/generated /generated
 WORKDIR /app
 CMD ["/app/chess_server"]

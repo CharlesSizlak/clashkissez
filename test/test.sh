@@ -7,8 +7,7 @@ sleep 10
 
 # Copy in build/generated
 rm -rf test/generated
-./build_generated.sh
-cp -r generated test
+docker cp ck_chess_server:/generated test/generated
 
 # Run register_send
 pushd "$(dirname "$(readlink -f "$0")")"

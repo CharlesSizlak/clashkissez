@@ -22,5 +22,6 @@ RUN ./install_runtime_packages.sh
 COPY install_debug_packages.sh .
 RUN ./install_debug_packages.sh
 COPY --from=build /build/binaries /app
+COPY --from=build /build/generated /generated
 WORKDIR /app
 CMD ["valgrind", "--leak-check=full", "/app/chess_server"]
