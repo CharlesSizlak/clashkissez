@@ -6,6 +6,8 @@ docker-compose up -d
 sleep 10
 
 # Copy in build/generated
+rm -rf test/generated
+./build_generated.sh
 cp -r generated test
 
 # Run register_send
