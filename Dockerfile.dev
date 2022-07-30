@@ -16,7 +16,7 @@ WORKDIR /build
 RUN ./debug.sh
 
 # Run the app
-FROM ubuntu:21.04 as runtime
+FROM ubuntu:20.04 as runtime
 COPY install_runtime_packages.sh .
 RUN ./install_runtime_packages.sh
 COPY install_debug_packages.sh .
