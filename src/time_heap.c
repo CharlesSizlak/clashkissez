@@ -172,7 +172,7 @@ bool heap_peek_by_id(time_heap_t *heap, size_t id)
     return timespec_gt(&current_time, &timer);
 }
 
-void heap_update(time_heap_t *heap, size_t id, struct timespec *element)
+void heap_update(time_heap_t *heap, size_t id, const struct timespec *element)
 {
     size_t index = thash_get(heap->hashtable, id);
     memcpy(&heap->elements[index].timer, element, sizeof(struct timespec));
