@@ -34,11 +34,11 @@ fi
 
 # Run game_invite_send
 #TODO figure out why game_invite_send is causing the server to hang
-#if [[ $STATUS == 0 ]]; then
-#    ./game_invite_send.py
-#    STATUS=$?
-#    echo "Called game_invite_send"
-#fi
+if [[ $STATUS == 0 ]]; then
+    ./game_invite_send.py
+    STATUS=$?
+    echo "Called game_invite_send"
+fi
 
 popd
 
