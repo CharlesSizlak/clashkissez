@@ -47,7 +47,6 @@ static void game_invite_get_user_document(request_ctx_t *ctx, bson_t **results) 
 }
 
 static void store_game_in_memory(
-    request_ctx_t *ctx,
     const char *sid,
     const char *inviting_player,
     const char *invited_player,
@@ -136,13 +135,11 @@ static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson
         BSON_APPEND_BOOL(insert, "white long castle rights", true);
         BSON_APPEND_BOOL(insert, "black short castle rights", true);
         BSON_APPEND_BOOL(insert, "black long castle rights", true);
-
         database_insert(ctx, GAMES, insert, (database_callback_f)game_invite_reply);
     }
     else {
         DEBUG_PRINTF("We should be storing the game in memory now");
-        store_game_in_memory(
-            ctx, 
+        store_game_in_memory( 
             notif_sid, 
             inviting_player, 
             invited_player,
@@ -210,7 +207,6 @@ static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson
     }
 }
 
-// TODO Start a first move timer.
 static void game_invite_reply(request_ctx_t *ctx, bson_t *result) {
     if (result == NULL) {
         queue_error(ctx, DATABASE_ERROR);

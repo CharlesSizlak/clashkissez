@@ -10,6 +10,9 @@
 #include "queue.h"
 #include "debug.h"
 
+#define SECONDS_PER_HOUR (60 * 60)
+#define SECONDS_PER_DAY (24 * 60 * 60)
+
 static bool signals_received[_NSIG];
 
 /*
@@ -43,6 +46,39 @@ timeval_subtract (result, x, y)
 }
 */
 
+static void tu_modify_timer(struct timespec *timer, int time, time_unit_e unit) {
+    switch (unit)
+    {
+    case TU_MILLISECONDS:
+        timer->tv_sec += time / 1000;
+        timer->tv_nsec += (time % 1000) * 1000000;
+        if (timer->tv_nsec < 0) {
+            timer->tv_sec -= 1;
+            timer->tv_nsec += 1000000000;
+        }
+        if (timer->tv_nsec >= 1000000000) {
+            timer->tv_sec += 1;
+            timer->tv_nsec -= 1000000000;
+        }
+        break;
+    
+    case TU_SECONDS:
+        timer->tv_sec += time;
+        break;
+    
+    case TU_MINUTES:
+        timer->tv_sec += time * 60;
+        break;
+    
+    case TU_HOURS:
+        timer->tv_sec += time * SECONDS_PER_HOUR;
+        break;
+    
+    case TU_DAYS:
+        timer->tv_sec += time * SECONDS_PER_DAY;
+        break;
+    }
+}
 
 void signal_caught(int signum) 
 {
@@ -148,6 +184,15 @@ void loop_remove_signal(loop_t *loop, int signum)
     return id;
 }
 
+size_t loop_add_timer_relative(loop_t *loop, int time, time_unit_e unit,
+    timer_callback_f cb, void *data) 
+{
+    struct timespec timer;
+    clock_gettime(CLOCK_MONOTONIC, &timer);
+    tu_modify_timer(&timer, time, unit);
+    return loop_add_timer(loop, &timer, cb, data);
+}
+
 void loop_remove_timer(loop_t *loop, size_t id)
 {
     heap_remove(loop->heap, id);
@@ -159,7 +204,8 @@ void loop_update_timer(loop_t *loop, size_t id, struct timespec *timer)
     heap_update(loop->heap, id, timer);
 }
 
-void loop_pause_timer(loop_t *loop, size_t id) {
+void loop_pause_timer(loop_t *loop, size_t id) 
+{
     static struct timespec infinite_timer = {
         .tv_nsec = 0xFFFFFFFF,
         .tv_sec = 0xFFFFFFFF
@@ -171,7 +217,8 @@ void loop_pause_timer(loop_t *loop, size_t id) {
     heap_update(loop->heap, id, &infinite_timer);
 }
 
-void loop_unpause_timer(loop_t *loop, size_t id) {
+void loop_unpause_timer(loop_t *loop, size_t id) 
+{
     paused_timer_t *timer = sz_hash_remove(loop->paused_timer_map, id);
     // Figure out the difference between pause_time and current time
     struct timespec current_time;
@@ -184,12 +231,21 @@ void loop_unpause_timer(loop_t *loop, size_t id) {
     free(timer);
 }
 
-int loop_get_time_remaining(loop_t *loop, size_t id) {
+int loop_get_time_remaining(loop_t *loop, size_t id) 
+{
     struct timespec current_time;
     clock_gettime(CLOCK_MONOTONIC, &current_time);
     struct timespec timer;
     heap_get(loop->heap, id, &timer);
     return timer_subtract(&timer, &current_time);
+}
+
+void loop_update_timer_relative(loop_t *loop, size_t id, int time, time_unit_e unit)
+{
+    struct timespec timer;
+    heap_get(loop->heap, id, &timer);
+    tu_modify_timer(&timer, time, unit);
+    loop_update_timer(loop, id, &timer);
 }
 
 /**

@@ -30,6 +30,14 @@ typedef enum event_e {
     TRIGGER_EVENT
 } event_e;
 
+typedef enum time_unit_e {
+    TU_MILLISECONDS,
+    TU_SECONDS,
+    TU_MINUTES,
+    TU_HOURS,
+    TU_DAYS
+} time_unit_e;
+
 typedef struct cb_data_t {
     void *cb;
     void *data;
@@ -109,12 +117,33 @@ size_t loop_add_timer(
     void *data
 );
 
+/**
+ * @brief Creates a timer that expires when you multiply time and unit together and add it to the current time.
+ * @param time The number of time units to add to the current time for the timer
+ * @param unit Defines what unit of time to multiply the parameter time by
+ * @return An id that can be used to later reference this timer
+ */
+size_t loop_add_timer_relative(
+    loop_t *loop, 
+    int time, 
+    time_unit_e unit,
+    timer_callback_f cb, 
+    void *data
+);
+
 // All these are pretty self explanatory
 void loop_remove_timer(loop_t *loop, size_t id);
 void loop_update_timer(loop_t *loop, size_t id, struct timespec *timer);
 void loop_pause_timer(loop_t *loop, size_t id);
 void loop_unpause_timer(loop_t *loop, size_t id);
 int loop_get_time_remaining(loop_t *loop, size_t id);
+
+/**
+ * @brief Updates a timer relative to the absolute time of that timers expiration.
+ * @param time The number of units to add or subtract to the existing timer
+ * @param unit Defines what unit of time to multiply the parameter time by
+ */
+void loop_update_timer_relative(loop_t *loop, size_t id, int time, time_unit_e unit);
 
 /**
  * @brief Returns the difference in milliseconds of a - b
