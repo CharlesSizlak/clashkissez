@@ -9,13 +9,53 @@
 #include "models.h"
 #include "handler_utilities.h"
 #include "debug.h"
+#include "loop.h"
 
 #define MS_IN_A_DAY (1000*60*60*24)
 #define MS_IN_AN_HOUR (1000*60*60)
+#define SECONDS_TO_ACCEPT_SHORT_GAME 60
 
 static void game_invite_get_user_document(request_ctx_t *ctx, bson_t **results);
 static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson_t **results);
 static void game_invite_reply(request_ctx_t *ctx, bson_t *result);
+
+void game_start_timer_short(loop_t *loop, size_t id, game_t *game) {
+    GameInviteTimedOutNotification_t *notif = GameInviteTimedOutNotification_new();
+    size_t buffer_size;
+    uint8_t *buffer;
+    GameInviteTimedOutNotification_serialize(notif, &buffer, &buffer_size);
+    GameInviteTimedOutNotification_free(notif);
+    int_vector_t *vector = str_hash_get(server_ctx.game_invite_subscriptions, game->inviting_sid);
+    if (vector != NULL) {
+        for (size_t i = 0; i < vector->count; i++) {
+            connection_ctx_t *notify_ctx = hash_get(server_ctx.connection_contexts, vector->values[i]);
+            if (notify_ctx == NULL) {
+                int_vector_remove_index(vector, i);
+                i -= 1;
+                continue;
+            }
+            else {
+                connection_ctx_queue_write(notify_ctx, buffer, buffer_size);
+            }
+        }
+    }
+    vector = str_hash_get(server_ctx.game_invite_subscriptions, game->invited_sid);
+    if (vector != NULL) {
+        for (size_t i = 0; i < vector->count; i++) {
+            connection_ctx_t *notify_ctx = hash_get(server_ctx.connection_contexts, vector->values[i]);
+            if (notify_ctx == NULL) {
+                int_vector_remove_index(vector, i);
+                i -= 1;
+                continue;
+            }
+            else {
+                connection_ctx_queue_write(notify_ctx, buffer, buffer_size);
+            }
+        }
+    }
+    str_hash_remove(server_ctx.active_games, game->game_id);
+    game_free(game);
+}
 
 void game_invite_handler(loop_t *loop, int fd, request_ctx_t *ctx) {
     bson_oid_t *oid;
@@ -46,7 +86,7 @@ static void game_invite_get_user_document(request_ctx_t *ctx, bson_t **results) 
     database_query(ctx, USERS, query, (database_callback_f)game_invite_get_invitee_document_and_notify);
 }
 
-static void store_game_in_memory(
+static game_t *store_game_in_memory(
     const char *sid,
     const char *inviting_player,
     const char *invited_player,
@@ -77,6 +117,7 @@ static void store_game_in_memory(
     game->black_short_castle_rights = true;
     game->black_long_castle_rights = true;
     str_hash_add(server_ctx.active_games, sid, game);
+    return game;
 }
 
 static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson_t **results) {
@@ -139,7 +180,7 @@ static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson
     }
     else {
         DEBUG_PRINTF("We should be storing the game in memory now");
-        store_game_in_memory( 
+        game_t *game = store_game_in_memory( 
             notif_sid, 
             inviting_player, 
             invited_player,
@@ -159,6 +200,7 @@ static void game_invite_get_invitee_document_and_notify(request_ctx_t *ctx, bson
         queue_write(ctx, buffer, buffer_size);
         free(buffer);
         stored_game_in_memory = true;
+        loop_add_timer_relative(ctx->connection_ctx->loop, 30, TU_SECONDS, (timer_callback_f)game_start_timer_short, (void *)game);
     }
 
     int_vector_t *vector = str_hash_get(server_ctx.game_invite_subscriptions, invited_sid);

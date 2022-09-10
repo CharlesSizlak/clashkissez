@@ -7,6 +7,7 @@
 #define BOARD_SIZE 64
 #define MAX_MOVES 512
 
+
 #define ROW(i) ((i) / 8)
 #define COLUMN(i) ((i) % 8)
 
@@ -27,6 +28,38 @@ typedef enum piece_e {
     PIECE_BLACK_KNIGHT = 0x25,
     PIECE_BLACK_PAWN = 0x26
 } piece_e;
+
+/*
+All righty now
+We can use a bitfield that corresponds to squares on the board stored in BOARD_STATE
+We can store an array of pieces that contain arrays of their legal moves
+We can use a hashtable to store board states that uses the board state as keys mapped to ints
+and we just up the ints by 1 every time a board state is reached and we check for
+repitition that way
+We need to store a flag that tracks checks
+If a check is reached we update all pieces legal moves in the array 
+only allowing moves that handle the check
+When a check is resolved we update all pieces of that colors legal moves again
+
+We need to be able to check for checkmate and stalemate after every move.
+Our bitfield can store the following information to help us do these checks
+1 Piece Present
+2 Piece is White/Black
+3 Square is under attack by a white pawn
+4 Square is under attack by a white knight
+5 Square is under attack by a white piece that moves like a bishop like this \ bend dexter
+6 Square is under attack by a white piece that moves like a bishop like this / bend sinister
+7 Square is under attack by a white piece that moves like a rook along a row
+8 Square is under attack by a white piece that moves like a rook along a columm
+9 Square is under attack by a white king
+10 Square is under attack by a black pawn
+11 Square is under attack by a black knight
+12 Square is under attack by a black piece that moves like a bishop like this \ bend dexter
+13 Square is under attack by a black piece that moves like a bishop like this / bend sinister
+14 Square is under attack by a black piece that moves like a rook along a row
+15 Square is under attack by a black piece that moves like a rook along a columm
+16 Square is under attack by a black  king
+*/
 
 typedef struct game_t {
     bool pending;

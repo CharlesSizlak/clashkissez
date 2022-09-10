@@ -2,7 +2,15 @@
 #define _HASH_H
 
 #include <khash.h>
+#include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
+#include "models.h"
+
+#define board_compare(a, b) (memcmp(a, b, BOARD_SIZE) == 0)
+#define board_hash(key) board_hash(key)
+
+//TODO Finish implementing a hash for game boards
 
 KHASH_MAP_INIT_INT(map, void*)
 KHASH_MAP_INIT_INT(sz_map, void*)

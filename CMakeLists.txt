@@ -81,7 +81,7 @@ add_executable(loop_test
     "${CMAKE_CURRENT_LIST_DIR}/src/queue.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/hash.c"
 )
-target_link_libraries(loop_test pthread)
+target_link_libraries(loop_test pthread serialib_chess)
 target_include_directories(loop_test PUBLIC 
     "${CMAKE_CURRENT_LIST_DIR}/include"
     "${CMAKE_CURRENT_LIST_DIR}/deps/klib"

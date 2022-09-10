@@ -56,6 +56,8 @@ popd
 # Take the server down
 docker-compose down
 
+rm -rf test/generated
+
 # Report status
 if [[ $STATUS != 0 ]]; then
     echo "Testing failed"

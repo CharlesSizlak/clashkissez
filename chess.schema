@@ -64,7 +64,7 @@ table GameInviteRequest {
 table ResolveGameInviteRequest {
     session_token:[uint8:16];
     accepted_status:bool;
-    game_invite_id:string;
+    game_id:string;
 }
 
 table FullGameInformationRequest {
@@ -207,7 +207,7 @@ table GameInviteReply {
 }
 
 table GameInviteNotification {
-    game_invite_id:string;
+    game_id:string;
     username:string;
     time_control_sender:uint32;
     time_increment_sender:uint32;
@@ -224,7 +224,9 @@ table GameDeclineNotification {
     game_id:string;
 }
 
-
+table GameInviteTimedOutNotification {
+    game_id:string;
+}
 
 table FullGameInformationReply {
     username:string;
